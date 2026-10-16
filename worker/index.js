@@ -1,3 +1,4 @@
+import { accessRequest } from "./access.js";
 import {
   ApiError,
   validateStory,
@@ -314,6 +315,16 @@ async function refreshSource(env, id, force) {
 }
 export default {
   async fetch(request, env) {
+    if (env.AUTH_MODE === "cloudflare-access") {
+      try {
+        request = await accessRequest(request, env);
+      } catch {
+        return new Response("Silakan masuk melalui Cloudflare Access.", {
+          status: 401,
+          headers: { "Cache-Control": "no-store" },
+        });
+      }
+    }
     const url = new URL(request.url);
     try {
       if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
