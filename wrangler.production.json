@@ -1,0 +1,17 @@
+{
+  "name": "ainews",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-10-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    "AUTH_MODE": "cloudflare-access",
+    "ACCESS_TEAM_DOMAIN": "harveymoeid.cloudflareaccess.com",
+    "ACCESS_AUD": "4b7f134e21c7358bb53cf97c7a42bfe791423f6dcdbeb8f7be88744dba96afc4",
+    "ADMIN_EMAIL": "harveymoeid@gmail.com"
+  },
+  "d1_databases": [{"binding":"DB","database_name":"ainews-db","database_id":"821522f1-c653-43b3-b872-64969cd41021","migrations_dir":"drizzle"}],
+  "r2_buckets": [{"binding":"BUCKET","bucket_name":"ainews-content"}],
+  "observability": {"enabled":true}
+}

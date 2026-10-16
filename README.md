@@ -52,3 +52,23 @@ node tests/remote.mjs
 ```
 
 Tes browser memerlukan Chromium pada `/usr/bin/chromium`, serta API lokal dan Vite aktif. Tes membuat materi uji dalam database lokal. Jangan arahkan tes ke produksi. Migrasi produksi dikemas di `dist/.openai/drizzle/`. Build menghasilkan Worker mandiri dengan aset frontend dan font lokal tertanam, tanpa dependensi CDN runtime.
+
+## Deployment Cloudflare Workers langsung
+
+Produksi: https://ainews.harveymoeid.workers.dev (seluruh halaman, LIVE, dan API dilindungi Cloudflare Access). Login menggunakan `harveymoeid@gmail.com` melalui identity provider Access akun ini.
+
+Worker `ainews` memakai D1 `ainews-db` dan R2 `ainews-content`. Migrasi awal telah diterapkan dan dicatat dalam `d1_migrations`. Konfigurasi produksi ada di `wrangler.production.json`, terpisah dari konfigurasi lokal yang memakai `DEV_AUTH=1`.
+
+```sh
+npm ci
+npm test
+npm run build
+npx wrangler d1 migrations apply DB --remote --config wrangler.production.json
+npx wrangler deploy --config wrangler.production.json
+```
+
+Deployment awal dilakukan melalui plugin Cloudflare, tanpa GitHub deploy secrets. CI tetap hanya melakukan test dan build; push ke GitHub tidak otomatis memperbarui Worker.
+
+Mode produksi `AUTH_MODE=cloudflare-access` memverifikasi tanda tangan JWT Access, issuer, audience, expiry, dan email admin sebelum melayani halaman maupun API. Header identitas Sites dari pemanggil diganti dengan identitas JWT yang sudah diverifikasi. Preview URLs dimatikan. Jangan menyalin konfigurasi lokal atau mengaktifkan `DEV_AUTH` untuk produksi.
+
+AI memerlukan secret Worker `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, dan/atau `OPENROUTER_API_KEY` sesuai provider yang dipilih. Tambahkan melalui Cloudflare Dashboard pada Worker `ainews`; kunci tidak disimpan di GitHub. Deployment awal belum memasang kunci provider, sehingga pembuatan naskah AI belum tersedia sampai secret dikonfigurasi. Data Sites lama tidak otomatis dipindahkan ke D1/R2 produksi ini.
