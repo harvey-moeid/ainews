@@ -47,3 +47,4 @@ jobs:
           test -s dist/server/wrangler.json
           test -s dist/.openai/hosting.json
           test -s dist/.openai/drizzle/0000_newsroom.sql
+          test -s dist/.openai/drizzle/0001_overlay2.sql

@@ -64,6 +64,10 @@ import {
   PanelLeftClose,
 } from "lucide-react";
 import Studio from "./Studio";
+import ProviderSettings from "./ProviderSettings.jsx";
+import Overlay2Settings from "./overlay2/Settings.jsx";
+import Overlay2Player from "./overlay2/Player.jsx";
+import "./overlay2/overlay2.css";
 import { api, send, download } from "./api";
 import {
   demoNews,
@@ -91,6 +95,7 @@ const nav = [
   { path: "/admin/broadcast", label: "Kontrol siaran", icon: Radio },
   { path: "/admin/presenter", label: "Presenter & studio", icon: UserRound },
   { path: "/admin/ai", label: "Konfigurasi AI", icon: Sparkles },
+  { path: "/admin/overlay2", label: "Overlay 2", icon: AudioLines },
   { path: "/simulator", label: "Simulator", icon: FlaskConical },
 ];
 const demoSources = [
@@ -968,6 +973,7 @@ function App() {
                   "/admin/broadcast": "Kontrol siaran",
                   "/admin/presenter": "Presenter & studio",
                   "/admin/ai": "Konfigurasi AI",
+                  "/admin/overlay2": "Overlay 2 · Host interaktif",
                   "/simulator": "Simulator studio",
                   "/admin/settings": "Pengaturan workspace",
                 }[path] || "Ruang redaksi"}
@@ -986,6 +992,8 @@ function App() {
                       "Bangun identitas visual dan suara studio Anda.",
                     "/admin/ai":
                       "Rangkuman yang terarah. Kendali editorial tetap di tangan Anda.",
+                    "/admin/overlay2":
+                      "Wajah wireframe, berita redaksi, dan percakapan TikTok LIVE.",
                     "/simulator":
                       "Uji presenter, audio, dan antrean sebelum mengudara.",
                     "/admin/settings":
@@ -1404,7 +1412,12 @@ function App() {
             />
           )}
           {path === "/admin/ai" && (
-            <AIPage {...{ settings, saveSettings, mode, notify }} />
+            <ProviderSettings {...{ settings, saveSettings, mode, notify }} />
+          )}
+          {path === "/admin/overlay2" && (
+            <Overlay2Settings
+              {...{ settings, saveSettings, mode, notify, go, queue }}
+            />
           )}
           {path === "/admin/settings" && (
             <SettingsPage
@@ -3136,158 +3149,6 @@ function PresenterPage({
     </div>
   );
 }
-function AIPage({ settings, saveSettings, mode, notify }) {
-  const [providers, setProviders] = useState(
-      settings.aiProviders || initialSettings.aiProviders,
-    ),
-    [health, setHealth] = useState({}),
-    [testing, setTesting] = useState(false);
-  useEffect(() => {
-    if (mode === "connected")
-      api("/ai/health")
-        .then(setHealth)
-        .catch(() => {});
-  }, [mode]);
-  const update = (id, k, v) =>
-    setProviders((a) => a.map((p) => (p.id === id ? { ...p, [k]: v } : p)));
-  const move = (i, d) => {
-    if (i + d < 0 || i + d >= providers.length) return;
-    const a = [...providers];
-    [a[i], a[i + d]] = [a[i + d], a[i]];
-    setProviders(a);
-  };
-  return (
-    <>
-      <div className="ai-intro panel">
-        <span className="ai-symbol">
-          <Sparkles size={25} />
-        </span>
-        <div>
-          <h2>Lebih dari satu jalan menuju naskah yang baik.</h2>
-          <p>
-            Provider dipanggil berurutan. Jika satu gagal, sistem mencoba
-            provider berikutnya. Seluruh hasil tetap memerlukan review editor.
-          </p>
-        </div>
-        <Badge tone="purple">Fallback bertingkat</Badge>
-      </div>
-      <div className="provider-list">
-        {providers.map((p, i) => (
-          <section className="panel provider-card" key={p.id}>
-            <div className="provider-rank">
-              {String(i + 1).padStart(2, "0")}
-            </div>
-            <div className={"provider-logo " + p.id}>
-              {p.id === "gemini" ? (
-                <Sparkles size={24} />
-              ) : p.id === "anthropic" ? (
-                "A"
-              ) : (
-                "↗"
-              )}
-            </div>
-            <div className="provider-info">
-              <h2>
-                {p.name}
-                <Badge tone={i === 0 ? "purple" : "muted"}>
-                  {i === 0 ? "Provider utama" : "Fallback " + i}
-                </Badge>
-              </h2>
-              <p>
-                {health[p.id]
-                  ? "Secret server terpasang"
-                  : "API key belum dikonfigurasi"}
-              </p>
-              <label>
-                Model
-                <input
-                  value={p.model}
-                  onChange={(e) => update(p.id, "model", e.target.value)}
-                  maxLength="160"
-                />
-              </label>
-            </div>
-            <div className="provider-actions">
-              <button
-                className={"toggle " + (p.enabled ? "on" : "")}
-                aria-label={"Aktifkan " + p.name}
-                aria-pressed={p.enabled}
-                onClick={() => update(p.id, "enabled", !p.enabled)}
-              >
-                <span />
-              </button>
-              <div>
-                <IconButton
-                  icon={ChevronUp}
-                  label="Naikkan prioritas provider"
-                  onClick={() => move(i, -1)}
-                  disabled={i === 0}
-                />
-                <IconButton
-                  icon={ChevronDown}
-                  label="Turunkan prioritas provider"
-                  onClick={() => move(i, 1)}
-                  disabled={i === providers.length - 1}
-                />
-              </div>
-            </div>
-          </section>
-        ))}
-      </div>
-      <div className="ai-bottom">
-        <div className="info-callout">
-          <ShieldCheck size={20} />
-          <div>
-            <b>API key tetap di server.</b>
-            <p>
-              Pasang <code>GEMINI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>
-              , atau <code>OPENROUTER_API_KEY</code> sebagai secret runtime.
-              Nilainya tidak pernah disimpan di browser atau database berita.
-            </p>
-          </div>
-        </div>
-        <div className="ai-buttons">
-          <Button
-            icon={RefreshCw}
-            disabled={testing}
-            onClick={async () => {
-              setTesting(true);
-              try {
-                if (mode !== "connected")
-                  throw new Error(
-                    "Hubungkan server untuk memeriksa konfigurasi.",
-                  );
-                const d = await api("/ai/health");
-                setHealth(d);
-                notify(
-                  Object.values(d).some(Boolean)
-                    ? "Konfigurasi secret terdeteksi. Uji rangkuman dari editor untuk memeriksa respons provider."
-                    : "Belum ada API key yang dikonfigurasi.",
-                  "info",
-                );
-              } catch (e) {
-                notify(e.message, "error");
-              } finally {
-                setTesting(false);
-              }
-            }}
-          >
-            Periksa konfigurasi
-          </Button>
-          <Button
-            icon={Save}
-            variant="primary"
-            onClick={() =>
-              saveSettings({ ...settings, aiProviders: providers })
-            }
-          >
-            Simpan konfigurasi
-          </Button>
-        </div>
-      </div>
-    </>
-  );
-}
 function SettingsPage({
   mode,
   user,
@@ -3422,4 +3283,10 @@ function SettingsPage({
     </div>
   );
 }
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  window.location.pathname.replace(/\/$/, "") === "/overlay2" ? (
+    <Overlay2Player />
+  ) : (
+    <App />
+  ),
+);

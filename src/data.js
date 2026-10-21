@@ -1,3 +1,4 @@
+import { mergeProviders, OVERLAY2_DEFAULTS } from "../shared/ai-catalog.js";
 export const demoNews = [
   {
     id: "demo-1",
@@ -116,26 +117,8 @@ export const initialSettings = {
   presenter: "Nara",
   glb: null,
   theme: "midnight",
-  aiProviders: [
-    {
-      id: "gemini",
-      name: "Google Gemini",
-      model: "gemini-2.5-flash",
-      enabled: true,
-    },
-    {
-      id: "anthropic",
-      name: "Anthropic",
-      model: "claude-sonnet-4-20250514",
-      enabled: true,
-    },
-    {
-      id: "openrouter",
-      name: "OpenRouter",
-      model: "openai/gpt-4.1-mini",
-      enabled: true,
-    },
-  ],
+  aiProviders: mergeProviders(),
+  overlay2: { ...OVERLAY2_DEFAULTS },
 };
 export const categories = [
   "Pemerintahan",
