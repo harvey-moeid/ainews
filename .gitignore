@@ -2,6 +2,7 @@ node_modules/
 dist/
 .wrangler/
 .env*
+.dev.vars*
 !.env.example
 *.tar.gz
 test-results/

@@ -1,6 +1,6 @@
 # Pasuruan AI News TV
 
-Ruang redaksi berbahasa Indonesia dan studio presenter virtual 3D, berdasarkan PRD v0.2. React + Vite + Three.js, Cloudflare Worker, D1 untuk metadata, R2 untuk naskah per revisi dan media. Deployment Sites bersifat privat.
+Ruang redaksi berbahasa Indonesia dan studio presenter virtual 3D, berdasarkan PRD v0.2. React + Vite + Three.js, Cloudflare Worker, D1 untuk metadata, R2 untuk naskah per revisi dan media. Produksi dilindungi Cloudflare Access.
 
 ## Menjalankan lokal
 
@@ -12,7 +12,7 @@ XDG_CONFIG_HOME=$PWD/.wrangler/config WRANGLER_LOG_PATH=.wrangler/logs WRANGLER_
 npm run dev
 ```
 
-Buka http://localhost:5173. `DEV_AUTH=1` hanya ada dalam konfigurasi lokal. Artefak produksi tidak menyalin variabel ini. Autentikasi produksi memakai identitas yang diberikan Sites dan kebijakan owner-private. Jangan membuka audience menjadi publik tanpa menambahkan otorisasi administrator tersendiri.
+Buka http://localhost:5173. `DEV_AUTH=1` hanya ada dalam konfigurasi lokal. Artefak produksi tidak menyalin variabel ini. Konfigurasi produksi langsung memakai Cloudflare Access dan hanya mengizinkan email admin. Manifest Sites lama tetap disertakan untuk kompatibilitas packaging.
 
 Jika API tidak tersedia, UI menyediakan demo sementara dengan label simulasi. Data demo browser tidak dianggap tersimpan di server. Pada server yang baru dan kosong, tombol **Muat contoh demo** mengisi contoh bertanda DEMO. Materi tersebut bukan laporan aktual.
 
@@ -27,7 +27,22 @@ Jika API tidak tersedia, UI menyediakan demo sementara dengan label simulasi. Da
 
 ## AI dan secrets
 
-Provider: Gemini, Anthropic, OpenRouter; model dan urutan fallback dapat disunting. Konfigurasikan secret server `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` melalui pengaturan runtime Sites. **Jangan** menaruh key di source, D1, R2, atau browser. Pemeriksaan konfigurasi hanya memeriksa keberadaan key; pengujian respons nyata dilakukan lewat editor. Saat seluruh provider gagal, naskah tidak direkayasa.
+Provider: Gemini, Anthropic, OpenRouter, OpenAI, dan Groq. Halaman `/admin/ai` menyediakan dropdown model tiap provider, pemuatan daftar terbaru melalui API provider, urutan fallback, toggle aktif, serta tes respons. Konfigurasi dipakai bersama oleh editor berita dan Overlay 2. Daftar model bawaan adalah titik awal; ketersediaan mengikuti akun provider. Jika seluruh provider gagal, aplikasi menampilkan kesalahan tanpa membuat naskah palsu.
+
+Key dapat diisi lewat halaman pengaturan setelah secret Worker `AI_KEY_ENCRYPTION_SECRET` dipasang (minimal 32 karakter acak). Nilai dienkripsi AES-GCM sebelum disimpan di tabel `app_credentials`; API hanya mengembalikan status keberadaannya. Simpan master key dengan aman: menggantinya tanpa migrasi membuat key tersimpan tidak bisa dibuka. Key tidak dimasukkan ke backup JSON berita. Alternatifnya, pasang `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, dan/atau `GROQ_API_KEY` langsung sebagai secret runtime. Nilai runtime didahulukan dan tidak dapat ditimpa melalui UI. Untuk pengembangan lokal, gunakan `.dev.vars` yang diabaikan Git.
+
+## Overlay 2 — berita dan komentar TikTok
+
+Modul tersendiri di repo ini: `/admin/overlay2` untuk pengaturan, `/overlay2` untuk pemutar wajah wireframe biru dengan mata oranye. Tidak bergantung pada modul tarot.
+
+1. Terapkan migrasi `0001_overlay2.sql`, lalu konfigurasikan provider dan model di **Konfigurasi AI**. Isi key konektor pada **Overlay 2**, atau pasang secret `TLK_API_KEY` yang nilainya sama dengan `API_KEY` server konektor. URL default mengikuti `https://tiktok-live-konektor.onrender.com` dan dapat diubah ke origin HTTPS lain.
+2. Mulai LIVE melalui dashboard konektor yang sudah ada. Klik **Uji koneksi tersimpan** untuk memeriksa status. Ainews menggunakan endpoint read-only `/api/v1/status` dan `/api/v1/events?type=chat,gift&limit=100`, dengan Bearer key server-side. Tidak mengubah pengaturan atau memulai LIVE konektor secara otomatis.
+3. Siapkan berita disetujui dalam antrean redaksi. Klik **Sinkronkan indeks RAG** untuk berita lama; berita baru otomatis diindeks dan pencarian juga mengisi indeks yang belum lengkap secara bertahap. RAG memakai pencarian kata FTS5/BM25 di D1, dengan potongan materi R2, sumber, tanggal, dan revisi. Ini bukan pencarian embedding/semantik. Draft dan data demo tidak menjadi sumber jawaban. Antrean tetap memakai snapshot berita, sementara RAG hanya mengambil revisi yang saat ini disetujui.
+4. Buka `/overlay2`, klik **Aktifkan suara & mulai**, lalu gunakan **Layar penuh untuk siaran** atau crop area 9:16 dalam OBS/TikTok LIVE Studio. Pemutar membaca berita per kalimat, menyisipkan maksimal dua jawaban sebelum melanjutkan kalimat berita berikutnya. Opsi pengulangan Overlay 2 terpisah dari mode putaran pemutar `/live`. Tombol putar/jeda dashboard untuk `/live` tidak mengendalikan Overlay 2; STOP darurat tetap menghentikan keduanya.
+5. Komentar biasa dijawab dengan konteks berita. Jika konteks tidak ditemukan, host menyampaikan bahwa informasi belum tersedia tanpa memanggil AI umum. Akun yang mengirim gift dalam sesi yang sama boleh mendapatkan jawaban AI umum ketika konteks berita tidak ditemukan. Hak tersebut terikat username + room + sesi, bukan nickname; gift streak dihitung setelah `repeatEnd`. Sesi baru menghapus hak sesi sebelumnya. Jawaban RAG dan jawaban AI umum diberi label berbeda di layar.
+6. Pilih suara browser atau **OpenAI TTS**. Suara browser memakai pilihan suara/rate/pitch presenter dan animasi mulut perkiraan. OpenAI TTS memakai `tts-1`, memerlukan key OpenAI, dan menggerakkan mulut berdasarkan amplitudo audio. Tidak ada klaim sinkronisasi fonem.
+
+Pemutar berbagi lease audio 90 detik dengan `/live`, memperpanjangnya sekitar 20 detik, dan berhenti jika lease/sesi berubah atau pembacaan state gagal. REST polling hanya berjalan saat pemutar aktif, sekitar setiap 3,5 detik ditambah latensi konektor. Feed diambil maksimal 100 event terbaru; event yang lebih tua dari dua menit, spam, komentar berulang, atau melebihi antrean dibuang. Pada LIVE sangat ramai atau browser yang ditangguhkan, beberapa event bisa terlewat. Tidak ada jaminan pengiriman setiap komentar; tangkap jendela browser aktif agar audio tidak ditangguhkan. Riwayat komentar/event dibersihkan setelah enam jam, hak gift sesi aktif dipertahankan sampai sesi diganti.
 
 ## Konsistensi dan batas
 
@@ -46,8 +61,10 @@ Provider: Gemini, Anthropic, OpenRouter; model dan urutan fallback dapat disunti
 node tests/core.test.mjs
 npm run build
 node tests/browser.mjs
+node tests/overlay2-browser.mjs
 node tests/api.mjs
 node tests/failure.test.mjs
+node tests/overlay2.test.mjs
 node tests/remote.mjs
 ```
 
@@ -71,4 +88,4 @@ Deployment awal dilakukan melalui plugin Cloudflare, tanpa GitHub deploy secrets
 
 Mode produksi `AUTH_MODE=cloudflare-access` memverifikasi tanda tangan JWT Access, issuer, audience, expiry, dan email admin sebelum melayani halaman maupun API. Header identitas Sites dari pemanggil diganti dengan identitas JWT yang sudah diverifikasi. Preview URLs dimatikan. Jangan menyalin konfigurasi lokal atau mengaktifkan `DEV_AUTH` untuk produksi.
 
-AI memerlukan secret Worker `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, dan/atau `OPENROUTER_API_KEY` sesuai provider yang dipilih. Tambahkan melalui Cloudflare Dashboard pada Worker `ainews`; kunci tidak disimpan di GitHub. Deployment awal belum memasang kunci provider, sehingga pembuatan naskah AI belum tersedia sampai secret dikonfigurasi. Data Sites lama tidak otomatis dipindahkan ke D1/R2 produksi ini.
+AI memerlukan key sesuai provider yang dipilih, melalui secret runtime atau penyimpanan terenkripsi di UI sebagaimana dijelaskan di atas. Tambahkan master key sekali melalui Cloudflare Dashboard pada Worker `ainews`. Integrasi TikTok memerlukan key konektor dan LIVE aktif. Build, migrasi lokal, tes SQL/FTS, dan browser tidak membuktikan koneksi LIVE atau suara provider sungguhan; uji dengan kredensial produksi setelah deploy. Data Sites lama tidak otomatis dipindahkan ke D1/R2 produksi ini.

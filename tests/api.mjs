@@ -67,6 +67,24 @@ r = await req("/lease", { id: "browser-test-a" });
 assert.equal(r.status, 200);
 r = await req("/lease", { id: "browser-test-b" });
 assert.equal(r.status, 409, "Second audio controller blocked");
+r = await req("/overlay2/index", {});
+assert.equal(r.status, 200, "FTS index runs on local D1");
+assert.ok(r.data.indexed >= 1);
+r = await req("/ai/catalog", null, "GET");
+assert.equal(r.data.providers.length, 5);
+r = await req("/overlay2/session", {
+  controller: "browser-test-a",
+  action: "start",
+});
+assert.equal(r.status, 200);
+r = await req("/overlay2/state", null, "GET");
+assert.equal(r.data.runtime.active, true);
+r = await req("/overlay2/poll", { controller: "browser-test-a" });
+assert.equal(
+  r.data.status,
+  "Error",
+  "Missing connector credential is reported without fake connection",
+);
 q = (await req("/live", null, "GET")).data.queue;
 r = await req(
   "/queue",
@@ -75,6 +93,11 @@ r = await req(
 );
 assert.equal(r.status, 200);
 assert.equal(r.data.lease, null, "Emergency stop releases audio lease");
+assert.equal(
+  (await req("/overlay2/state", null, "GET")).data.runtime.active,
+  false,
+  "Emergency stop ends Overlay 2 session",
+);
 r = await req("/sources", {
   name: "Akses tidak sah",
   type: "RSS",
