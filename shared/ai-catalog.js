@@ -58,6 +58,7 @@ export function mergeProviders(saved = []) {
 
 export const OVERLAY2_DEFAULTS = {
   name: "NARA",
+  title: "PASURUAN AI NEWS TV · OVERLAY 2",
   banner: "KABAR PASURUAN · TANYA LEWAT KOMENTAR",
   connectorUrl: "https://tiktok-live-konektor.onrender.com",
   comments: true,

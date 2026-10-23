@@ -9,6 +9,7 @@ export function validateOverlay2(value = {}) {
   const x = { ...OVERLAY2_DEFAULTS, ...value };
   for (const [key, max] of [
     ["name", 40],
+    ["title", 100],
     ["banner", 120],
     ["prompt", 2000],
   ]) {

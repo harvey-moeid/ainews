@@ -40,7 +40,11 @@ Modul tersendiri di repo ini: `/admin/overlay2` untuk pengaturan, `/overlay2` un
 3. Siapkan berita disetujui dalam antrean redaksi. Klik **Sinkronkan indeks RAG** untuk berita lama; berita baru otomatis diindeks dan pencarian juga mengisi indeks yang belum lengkap secara bertahap. RAG memakai pencarian kata FTS5/BM25 di D1, dengan potongan materi R2, sumber, tanggal, dan revisi. Ini bukan pencarian embedding/semantik. Draft dan data demo tidak menjadi sumber jawaban. Antrean tetap memakai snapshot berita, sementara RAG hanya mengambil revisi yang saat ini disetujui.
 4. Buka `/overlay2`, klik **Aktifkan suara & mulai**, lalu gunakan **Layar penuh untuk siaran** atau crop area 9:16 dalam OBS/TikTok LIVE Studio. Pemutar membaca berita per kalimat, menyisipkan maksimal dua jawaban sebelum melanjutkan kalimat berita berikutnya. Opsi pengulangan Overlay 2 terpisah dari mode putaran pemutar `/live`. Tombol putar/jeda dashboard untuk `/live` tidak mengendalikan Overlay 2; STOP darurat tetap menghentikan keduanya.
 5. Komentar biasa dijawab dengan konteks berita. Jika konteks tidak ditemukan, host menyampaikan bahwa informasi belum tersedia tanpa memanggil AI umum. Akun yang mengirim gift dalam sesi yang sama boleh mendapatkan jawaban AI umum ketika konteks berita tidak ditemukan. Hak tersebut terikat username + room + sesi, bukan nickname; gift streak dihitung setelah `repeatEnd`. Sesi baru menghapus hak sesi sebelumnya. Jawaban RAG dan jawaban AI umum diberi label berbeda di layar.
-6. Pilih suara browser atau **OpenAI TTS**. Suara browser memakai pilihan suara/rate/pitch presenter dan animasi mulut perkiraan. OpenAI TTS memakai `tts-1`, memerlukan key OpenAI, dan menggerakkan mulut berdasarkan amplitudo audio. Tidak ada klaim sinkronisasi fonem.
+6. Pilih suara browser atau **OpenAI TTS**. Suara browser memakai pilihan suara/rate/pitch presenter. Gerak mulut mengikuti event batas kata `speechSynthesis.onboundary` bila tersedia; bentuk A/I/U/E/O diperkirakan dari huruf kata, dengan mulut menutup di antara kata, tanda baca, pause, akhir suara, error, dan STOP. Browser/suara yang tidak mengirim event kata memakai perkiraan durasi teks sesuai rate. Durasi setiap huruf tetap perkiraan, bukan timing fonem aktual. OpenAI TTS memakai `tts-1`, memerlukan key OpenAI, dan menggerakkan mulut berdasarkan amplitudo audio. Tidak ada klaim sinkronisasi fonem.
+
+Judul di bawah nama host dapat diubah melalui **Overlay 2 → Tampilan & suara → Judul Overlay 2**, lalu **Simpan Overlay 2**. Pratinjau admin langsung mengikuti isian. Pemutar memperbarui pengaturan saat aktif dan setiap 10 detik saat standby. Pengaturan lama memakai judul bawaan sampai diubah.
+
+Tombol **Layar penuh untuk siaran** tersedia sejak standby. Tampilan memenuhi layar desktop maupun ponsel; jika Fullscreen API tidak tersedia, area siaran memenuhi jendela browser. Arahkan pointer ke sudut kanan atas untuk kontrol mulai/hentikan sesi dan **Keluar layar penuh**, atau tekan Escape untuk keluar. Pada layar sentuh, kontrol tersedia di bawah.
 
 Pemutar berbagi lease audio 90 detik dengan `/live`, memperpanjangnya sekitar 20 detik, dan berhenti jika lease/sesi berubah atau pembacaan state gagal. REST polling hanya berjalan saat pemutar aktif, sekitar setiap 3,5 detik ditambah latensi konektor. Feed diambil maksimal 100 event terbaru; event yang lebih tua dari dua menit, spam, komentar berulang, atau melebihi antrean dibuang. Pada LIVE sangat ramai atau browser yang ditangguhkan, beberapa event bisa terlewat. Tidak ada jaminan pengiriman setiap komentar; tangkap jendela browser aktif agar audio tidak ditangguhkan. Riwayat komentar/event dibersihkan setelah enam jam, hak gift sesi aktif dipertahankan sampai sesi diganti.
 
@@ -62,9 +66,11 @@ node tests/core.test.mjs
 npm run build
 node tests/browser.mjs
 node tests/overlay2-browser.mjs
+node tests/speech-mouth-browser.mjs
 node tests/api.mjs
 node tests/failure.test.mjs
 node tests/overlay2.test.mjs
+node tests/speech-mouth.test.mjs
 node tests/remote.mjs
 ```
 
