@@ -45,12 +45,14 @@
   color: #8199ff;
   margin: 0 0 5px;
   text-shadow: 0 0 15px #3765ff;
+  overflow-wrap: anywhere;
 }
 .o2-stage header p {
   font-size: 7px;
   letter-spacing: 0.24em;
   margin: 0;
   color: #968b8b;
+  overflow-wrap: anywhere;
 }
 .o2-banner {
   font-size: clamp(10px, 1.3vw, 16px);
@@ -221,18 +223,66 @@
   padding: 12px;
   cursor: pointer;
 }
-.o2-stage:fullscreen {
+.o2-player > .o2-stage.o2-expanded,
+.o2-player > .o2-stage:fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
+  max-width: none;
   aspect-ratio: auto;
+  border: 0;
 }
+.o2-stage.o2-expanded .o2-face,
 .o2-stage:fullscreen .o2-face {
   max-width: 75vh;
   margin-inline: auto;
 }
+.o2-stage.o2-expanded .o2-transcript,
 .o2-stage:fullscreen .o2-transcript {
   max-width: 600px;
   align-self: center;
+}
+.o2-stage-controls {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 100%;
+  padding: 12px;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+.o2-stage-controls:hover,
+.o2-stage-controls:focus-within {
+  opacity: 1;
+}
+.o2-stage-controls button {
+  background: #101832ed;
+  color: #dbe3ff;
+  border: 1px solid #536391;
+  border-radius: 7px;
+  padding: 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.o2-stage-controls button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+@media (hover: none) {
+  .o2-stage-controls {
+    top: auto;
+    bottom: 0;
+    opacity: 1;
+  }
 }
 .o2-settings-grid {
   display: grid;

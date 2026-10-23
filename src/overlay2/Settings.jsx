@@ -59,7 +59,7 @@ export default function Overlay2Settings({
         <div className="o2-stage">
           <header>
             <h2>{draft.name}</h2>
-            <p>PASURUAN AI NEWS TV · OVERLAY 2</p>
+            <p>{draft.title}</p>
           </header>
           <div className="o2-banner">{draft.banner}</div>
           <div className="o2-face">
@@ -114,6 +114,15 @@ export default function Overlay2Settings({
           }}
         >
           <h2>Tampilan & suara</h2>
+          <label>
+            Judul Overlay 2
+            <input
+              value={draft.title}
+              required
+              maxLength={100}
+              onChange={(e) => set("title", e.target.value)}
+            />
+          </label>
           <div className="o2-two">
             <label>
               Nama host
@@ -215,8 +224,11 @@ export default function Overlay2Settings({
           </div>
           <p className="o2-help">
             Pengaturan AI ada di Konfigurasi AI. Suara OpenAI memerlukan key
-            OpenAI. Gift dikenali sejak sesi dimulai, berdasarkan username dalam
-            room yang sama.
+            OpenAI; gerak mulut mengikuti level audio, belum bentuk fonem. Suara
+            browser mengikuti batas kata bila didukung dan memperkirakan bentuk
+            vokal A/I/U/E/O; tanpa event kata, waktunya diperkirakan dari teks.
+            Gift dikenali sejak sesi dimulai, berdasarkan username dalam room
+            yang sama.
           </p>
           <button className="btn primary" type="submit">
             Simpan Overlay 2

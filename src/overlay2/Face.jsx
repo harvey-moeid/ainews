@@ -1,6 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { VirtualFace } from "./face.js";
-export default function Face({ speaking = false, level = 0, preview = false }) {
+export default function Face({
+  speaking = false,
+  level = 0,
+  mouth = null,
+  preview = false,
+}) {
   const canvas = useRef(null),
     instance = useRef(null);
   const [error, setError] = useState(false);
@@ -13,8 +18,8 @@ export default function Face({ speaking = false, level = 0, preview = false }) {
     return () => instance.current?.dispose();
   }, [preview]);
   useEffect(() => {
-    instance.current?.setAudio(level, speaking);
-  }, [level, speaking]);
+    instance.current?.setAudio(level, speaking, mouth);
+  }, [level, speaking, mouth]);
   return (
     <>
       <canvas

@@ -120,6 +120,50 @@ const story = {
   published_at: "2026-10-20T08:00:00Z",
 };
 
+test("Overlay 2 title persists through settings and player state; legacy settings retain the default", async () => {
+  const { sqlite, env } = database();
+  try {
+    const title = "Kabar Warga · Pasuruan";
+    const saved = await request(
+      env,
+      "/settings",
+      {
+        ...settings,
+        overlay2: { ...settings.overlay2, title },
+      },
+      "PUT",
+    );
+    assert.equal(saved.status, 200);
+    const state = await request(env, "/overlay2/state", undefined, "GET");
+    assert.equal(state.data.config.title, title);
+    const { title: unused, ...legacy } = state.data.config;
+    assert.equal(
+      validateOverlay2(legacy).title,
+      initialSettings.overlay2.title,
+    );
+    for (const invalid of ["", "   ", "x".repeat(101), null, 123]) {
+      const result = await request(
+        env,
+        "/settings",
+        {
+          ...settings,
+          version: saved.data.version,
+          overlay2: { ...settings.overlay2, title: invalid },
+        },
+        "PUT",
+      );
+      assert.equal(result.status, 400);
+    }
+    assert.equal(
+      (await request(env, "/overlay2/state", undefined, "GET")).data.config
+        .title,
+      title,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("event validation rejects stale/replayed streaks and nickname-only identity", () => {
   const now = Date.now();
   assert.equal(

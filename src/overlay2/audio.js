@@ -1,3 +1,5 @@
+import { createSpeechMouth } from "./speech-mouth.js";
+
 // One speech job at a time. Cancellation settles the promise even when a browser
 // does not dispatch speechSynthesis.onend after cancel().
 export function speakBrowser(text, settings, signal, onLevel) {
@@ -19,15 +21,16 @@ export function speakBrowser(text, settings, signal, onLevel) {
     utterance.lang = "id-ID";
     utterance.rate = settings.rate || 1;
     utterance.pitch = settings.pitch || 1;
-    let done = false,
-      pulse;
+    const mouth = createSpeechMouth(text, utterance.rate, (pose) =>
+      onLevel(pose.level, pose),
+    );
+    let done = false;
     const finish = (error) => {
       if (done) return;
       done = true;
-      clearInterval(pulse);
+      mouth.stop();
       clearTimeout(timeout);
       signal.removeEventListener("abort", cancel);
-      onLevel(0);
       error ? reject(error) : resolve();
     };
     const cancel = () => {
@@ -40,12 +43,25 @@ export function speakBrowser(text, settings, signal, onLevel) {
     }, 120000);
     signal.addEventListener("abort", cancel, { once: true });
     utterance.onstart = () => {
-      pulse = setInterval(() => onLevel(0.15 + Math.random() * 0.55), 110);
+      if (!done) mouth.start();
+    };
+    utterance.onboundary = (event) => {
+      if (!done) mouth.boundary(event);
+    };
+    utterance.onpause = () => {
+      if (!done) mouth.pause();
+    };
+    utterance.onresume = () => {
+      if (!done) mouth.resume();
     };
     utterance.onend = () => finish();
     utterance.onerror = (event) =>
       finish(Error("Suara browser gagal: " + event.error));
-    speechSynthesis.speak(utterance);
+    try {
+      speechSynthesis.speak(utterance);
+    } catch (error) {
+      finish(error);
+    }
   });
 }
 

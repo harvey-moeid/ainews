@@ -213,9 +213,10 @@ export class VirtualFace {
     this.camera.position.z = this.camera.aspect < 0.7 ? 9.7 : 8.0;
     this.camera.updateProjectionMatrix();
   }
-  setAudio(level, speaking) {
+  setAudio(level, speaking, mouth = null) {
     this.level = Math.max(0, Math.min(1, level));
     this.speaking = speaking;
+    this.width = mouth?.width ?? 1;
   }
   tick(time) {
     this.frame = requestAnimationFrame((t) => this.tick(t));
@@ -223,17 +224,24 @@ export class VirtualFace {
       return;
     this.lastFrame = time;
     const t = time / 1000;
-    const target = this.speaking ? Math.max(0.035, this.level) * 0.32 : 0;
+    const target = this.speaking ? this.level * 0.32 : 0;
     this.jaw = (this.jaw || 0) * 0.65 + target * 0.35;
+    this.mouthWidth =
+      (this.mouthWidth ?? 1) * 0.65 + (this.speaking ? this.width : 1) * 0.35;
     const p = this.geometry.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const y = this.base[i * 3 + 1],
         z = this.base[i * 3 + 2];
       const weight = z > 0.2 ? Math.max(0, Math.min(1, (-y - 0.62) / 0.55)) : 0;
       p.array[i * 3 + 1] = y - this.jaw * weight;
+      const x = this.base[i * 3];
+      const lip =
+        z > 0.4 ? Math.exp(-((x / 0.5) ** 2 + ((y + 0.725) / 0.24) ** 2)) : 0;
+      p.array[i * 3] = x * (1 + (this.mouthWidth - 1) * lip);
     }
     p.needsUpdate = true;
-    this.mouth.scale.y = 0.053 + this.jaw * 0.37;
+    this.mouth.scale.x = 0.32 * this.mouthWidth;
+    this.mouth.scale.y = 0.008 + this.jaw * 0.6;
     this.mouth.position.y = -0.725 - this.jaw * 0.3;
     const blink = this.reduced ? 1 : t % 5.4 > 5.23 ? 0.12 : 1;
     this.eyes.forEach((eye) => (eye.scale.y = blink));

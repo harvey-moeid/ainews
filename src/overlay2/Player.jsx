@@ -27,9 +27,11 @@ const safeLink = (value) => {
 export default function Overlay2Player() {
   const [state, setState] = useState(null),
     [active, setActive] = useState(false),
+    [fullscreen, setFullscreen] = useState(false),
     [starting, setStarting] = useState(false);
   const [phase, setPhase] = useState("STANDBY"),
     [level, setLevel] = useState(0),
+    [mouth, setMouth] = useState(null),
     [caption, setCaption] = useState(""),
     [topic, setTopic] = useState(null),
     [error, setError] = useState("");
@@ -39,8 +41,47 @@ export default function Overlay2Player() {
     run = useRef(null),
     audioContext = useRef(null),
     position = useRef({ key: "", segment: 0, finished: new Set() });
-  const config = state?.config || OVERLAY2_DEFAULTS;
+  const config = { ...OVERLAY2_DEFAULTS, ...state?.config };
   const speaking = phase === "SPEAKING";
+  async function enterFullscreen() {
+    setFullscreen(true);
+    try {
+      await stage.current.requestFullscreen?.();
+    } catch {
+      // Keep the stage filling the browser if native fullscreen is unavailable.
+    }
+  }
+  async function exitFullscreen() {
+    try {
+      if (document.fullscreenElement === stage.current)
+        await document.exitFullscreen();
+      setFullscreen(false);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  useEffect(() => {
+    const changed = () =>
+      setFullscreen(document.fullscreenElement === stage.current);
+    const escape = (event) => {
+      if (event.key === "Escape" && !document.fullscreenElement)
+        setFullscreen(false);
+    };
+    document.addEventListener("fullscreenchange", changed);
+    window.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("fullscreenchange", changed);
+      window.removeEventListener("keydown", escape);
+    };
+  }, []);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [fullscreen]);
   async function refresh() {
     const next = await api("/overlay2/state", {
       signal: AbortSignal.timeout(10000),
@@ -57,6 +98,7 @@ export default function Overlay2Player() {
     setActive(false);
     setPhase("STANDBY");
     setLevel(0);
+    setMouth(null);
     if (message) setError(message);
     if (current) {
       try {
@@ -77,6 +119,9 @@ export default function Overlay2Player() {
   }
   useEffect(() => {
     void refresh().catch((e) => setError(e.message));
+    const standbyRefresh = setInterval(() => {
+      if (!run.current) void refresh().catch((e) => setError(e.message));
+    }, 10000);
     const channel = new BroadcastChannel("pasuruan-studio");
     channel.onmessage = (event) => {
       if (event.data?.type === "STOP" || event.data === "STOP")
@@ -89,6 +134,7 @@ export default function Overlay2Player() {
     window.addEventListener("pagehide", leave);
     return () => {
       run.current?.abort();
+      clearInterval(standbyRefresh);
       channel.close();
       window.removeEventListener("pagehide", leave);
       void audioContext.current?.close();
@@ -105,10 +151,15 @@ export default function Overlay2Player() {
         signal,
         setLevel,
       );
-    else await speakBrowser(text, latest.current.audio, signal, setLevel);
+    else
+      await speakBrowser(text, latest.current.audio, signal, (level, pose) => {
+        setLevel(level);
+        setMouth(pose);
+      });
     if (!signal.aborted) {
       setPhase("LISTENING");
       setLevel(0);
+      setMouth(null);
     }
   }
   async function play(signal) {
@@ -323,14 +374,32 @@ export default function Overlay2Player() {
   const connected = /^(connected|live)$/i.test(state?.connector?.status || "");
   return (
     <main className="o2-player">
-      <div className="o2-stage" ref={stage}>
+      <div
+        className={`o2-stage${fullscreen ? " o2-expanded" : ""}`}
+        ref={stage}
+      >
         <header>
           <h1>{config.name}</h1>
-          <p>PASURUAN AI NEWS TV · OVERLAY 2</p>
+          <p>{config.title}</p>
         </header>
+        {fullscreen && (
+          <div className="o2-stage-controls" aria-label="Kontrol layar penuh">
+            <button
+              disabled={starting || !state}
+              onClick={() => (active ? stop() : start())}
+            >
+              {starting
+                ? "Memproses…"
+                : active
+                  ? "Hentikan sesi"
+                  : "Aktifkan suara & mulai"}
+            </button>
+            <button onClick={exitFullscreen}>Keluar layar penuh</button>
+          </div>
+        )}
         <div className="o2-banner">{config.banner}</div>
         <div className="o2-face">
-          <Face speaking={speaking} level={level} />
+          <Face speaking={speaking} level={level} mouth={mouth} />
         </div>
         <div className="o2-transcript" aria-live="polite">
           {topic && (
@@ -421,23 +490,14 @@ export default function Overlay2Player() {
               ? "■ Hentikan sesi"
               : "▶ Aktifkan suara & mulai"}
         </button>
-        {active && (
-          <button
-            className="o2-fullscreen"
-            onClick={() =>
-              stage.current
-                .requestFullscreen?.()
-                .catch((e) => setError(e.message))
-            }
-          >
-            Layar penuh untuk siaran
-          </button>
-        )}
+        <button className="o2-fullscreen" onClick={enterFullscreen}>
+          Layar penuh untuk siaran
+        </button>
         <small>
           Suara{" "}
           {config.voiceMode === "openai"
             ? "AI OpenAI · animasi mengikuti audio"
-            : "browser · animasi bicara simulasi"}
+            : "browser · animasi kata & vokal (perkiraan)"}
         </small>
       </aside>
     </main>

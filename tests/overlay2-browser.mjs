@@ -21,6 +21,22 @@ try {
   await page.goto("http://127.0.0.1:5173/admin/overlay2");
   await page.getByText("Sistem terhubung", { exact: true }).waitFor();
   await page.getByLabel("Nama host").waitFor();
+  const title = "Kabar Warga · Pasuruan";
+  await page.getByLabel("Judul Overlay 2", { exact: true }).fill(title);
+  assert.equal(await page.locator(".o2-preview header p").textContent(), title);
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.url().endsWith("/api/settings") && r.request().method() === "PUT",
+    ),
+    page.getByRole("button", { name: "Simpan Overlay 2", exact: true }).click(),
+  ]);
+  await page.reload();
+  await page.getByText("Sistem terhubung", { exact: true }).waitFor();
+  assert.equal(
+    await page.getByLabel("Judul Overlay 2", { exact: true }).inputValue(),
+    title,
+  );
   assert.equal(
     await page.getByLabel("Alamat konektor").inputValue(),
     OVERLAY2_DEFAULTS.connectorUrl,
@@ -49,11 +65,66 @@ try {
     .getByRole("button", { name: "Aktifkan suara & mulai", exact: false })
     .waitFor();
   await page.waitForTimeout(500);
+  assert.equal(await page.locator(".o2-stage header p").textContent(), title);
+  const enterFullscreen = () =>
+    page
+      .getByRole("button", { name: "Layar penuh untuk siaran", exact: true })
+      .click();
+  const assertFillsViewport = () =>
+    page.waitForFunction(() => {
+      const rect = document.querySelector(".o2-stage").getBoundingClientRect();
+      return (
+        rect.x === 0 &&
+        rect.y === 0 &&
+        Math.abs(rect.width - innerWidth) < 2 &&
+        Math.abs(rect.height - innerHeight) < 2
+      );
+    });
+  await enterFullscreen();
+  await assertFillsViewport();
+  assert.equal(
+    await page.evaluate(() =>
+      document.fullscreenElement?.classList.contains("o2-stage"),
+    ),
+    true,
+  );
+  await page
+    .getByRole("button", { name: "Keluar layar penuh", exact: true })
+    .focus();
+  await page
+    .getByRole("button", { name: "Keluar layar penuh", exact: true })
+    .click();
+  await page.waitForFunction(
+    () =>
+      !document.fullscreenElement && !document.querySelector(".o2-expanded"),
+  );
   await page.screenshot({
     path: "test-results/overlay2-desktop.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  // A rejected Fullscreen API still fills the mobile browser and Escape exits.
+  await page.evaluate(() => {
+    document.querySelector(".o2-stage").requestFullscreen = async () => {
+      throw Error("Unsupported");
+    };
+  });
+  await enterFullscreen();
+  await assertFillsViewport();
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector(".o2-expanded"));
+  // Browsers without the API can also enter and exit via the on-screen control.
+  await page.evaluate(() => {
+    document.querySelector(".o2-stage").requestFullscreen = undefined;
+  });
+  await enterFullscreen();
+  await assertFillsViewport();
+  await page
+    .getByRole("button", { name: "Keluar layar penuh", exact: true })
+    .focus();
+  await page
+    .getByRole("button", { name: "Keluar layar penuh", exact: true })
+    .click();
   await page.screenshot({
     path: "test-results/overlay2-mobile.png",
     fullPage: true,
@@ -184,7 +255,7 @@ try {
   assert.equal(lease, null);
   assert.deepEqual(errors, []);
   console.log(
-    "Overlay 2 browser passed: separate page, five model dropdowns, settings persistence, responsive canvas, sentence-boundary reply, news resume, one audio job, session stop.",
+    "Overlay 2 browser passed: editable title persistence and preview, native fullscreen in standby, mobile fullscreen fallback and exit, five model dropdowns, responsive canvas, sentence-boundary reply, news resume, one audio job, session stop.",
   );
 } finally {
   await browser.close();
