@@ -1,6 +1,7 @@
 import { splitNarration } from "../shared/narration.js";
 import { ApiError } from "./core.js";
 import { OVERLAY2_DEFAULTS } from "../shared/ai-catalog.js";
+import { HAIR_STYLES, CHARACTER_ACCESSORIES } from "../shared/character.js";
 import { getCredential } from "./credentials.js";
 import { readBounded, synthesize } from "./ai.js";
 import { answerWithNews, syncIndex } from "./rag.js";
@@ -47,6 +48,21 @@ export function validateOverlay2(value = {}) {
   for (const key of ["comments", "readComment", "loopNews"])
     if (typeof x[key] !== "boolean")
       throw new ApiError("Pilihan Overlay 2 tidak valid.");
+  for (const [key, min, max] of [
+    ["transcriptX", 0, 100],
+    ["transcriptY", 0, 100],
+    ["transcriptWidth", 30, 100],
+  ])
+    if (!Number.isInteger(x[key]) || x[key] < min || x[key] > max)
+      throw new ApiError("Posisi/lebar pertanyaan dan jawaban tidak valid.");
+  if (
+    !HAIR_STYLES.some((style) => style.id === x.hairStyle) ||
+    !CHARACTER_ACCESSORIES.some((accessory) => accessory.id === x.accessory)
+  )
+    throw new ApiError("Pilihan rambut/aksesori karakter tidak valid.");
+  for (const key of ["hairColor", "faceColor", "eyeColor"])
+    if (typeof x[key] !== "string" || !/^#[0-9a-f]{6}$/i.test(x[key]))
+      throw new ApiError("Warna karakter harus berupa kode warna #RRGGBB.");
   return Object.fromEntries(
     Object.keys(OVERLAY2_DEFAULTS).map((key) => [
       key,

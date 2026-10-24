@@ -3,6 +3,7 @@ import { api, send } from "../api.js";
 import { OVERLAY2_DEFAULTS } from "../../shared/ai-catalog.js";
 import { splitNarration } from "../../shared/narration.js";
 import Face from "./Face.jsx";
+import Transcript from "./Transcript.jsx";
 import { speakAI, speakBrowser } from "./audio.js";
 
 const wait = (signal, ms) =>
@@ -15,14 +16,6 @@ const wait = (signal, ms) =>
     const timer = setTimeout(end, ms);
     signal.addEventListener("abort", end, { once: true });
   });
-const safeLink = (value) => {
-  try {
-    const url = new URL(value);
-    return ["https:", "http:"].includes(url.protocol) ? url.href : undefined;
-  } catch {
-    return undefined;
-  }
-};
 
 export default function Overlay2Player() {
   const [state, setState] = useState(null),
@@ -399,46 +392,14 @@ export default function Overlay2Player() {
         )}
         <div className="o2-banner">{config.banner}</div>
         <div className="o2-face">
-          <Face speaking={speaking} level={level} mouth={mouth} />
+          <Face
+            speaking={speaking}
+            level={level}
+            mouth={mouth}
+            appearance={config}
+          />
         </div>
-        <div className="o2-transcript" aria-live="polite">
-          {topic && (
-            <>
-              <small>
-                {
-                  {
-                    news: topic.demo ? "BERITA DEMO" : "BERITA",
-                    rag: "JAWABAN DARI ARSIP BERITA",
-                    general: "JAWABAN AI UMUM · GIFT",
-                    no_context: "KONTEKS BELUM TERSEDIA",
-                    comment: "KOMENTAR MASUK",
-                  }[topic.kind]
-                }
-              </small>
-              <h2>{topic.title}</h2>
-              {topic.question && (
-                <p className="o2-question">“{topic.question}”</p>
-              )}
-              <p>{caption}</p>
-              {topic.source && (
-                <span>
-                  {topic.source} ·{" "}
-                  {new Date(topic.date).toLocaleDateString("id-ID")}
-                </span>
-              )}
-              {topic.citations?.map((c) => (
-                <a
-                  href={safeLink(c.url)}
-                  key={c.id}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {c.source} · {c.title}
-                </a>
-              ))}
-            </>
-          )}
-        </div>
+        <Transcript config={config} topic={topic} caption={caption} />
         <footer>
           <b className={speaking ? "speaking" : ""}>● {phase}</b>
           <div className="o2-wave" aria-hidden="true">

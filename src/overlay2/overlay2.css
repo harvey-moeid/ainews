@@ -120,7 +120,15 @@
   transition: height 80ms ease;
 }
 .o2-transcript {
-  margin: auto 6% 0;
+  margin: 0;
+  box-sizing: border-box;
+  width: var(--o2-transcript-width, 88%);
+  left: var(--o2-transcript-x, 50%);
+  top: var(--o2-transcript-y, 60%);
+  transform: translate(
+    calc(0% - var(--o2-transcript-x, 50%)),
+    calc(0% - var(--o2-transcript-y, 60%))
+  );
   padding: 12px 0 5px;
   background: linear-gradient(0deg, #01030aee, #01030ab0, transparent);
   font-size: 12px;
@@ -128,7 +136,8 @@
   max-height: 31%;
   overflow: auto;
   scrollbar-width: thin;
-  position: relative;
+  position: absolute;
+  overflow-wrap: anywhere;
   z-index: 1;
 }
 .o2-transcript:empty {
@@ -239,11 +248,6 @@
 .o2-stage:fullscreen .o2-face {
   max-width: 75vh;
   margin-inline: auto;
-}
-.o2-stage.o2-expanded .o2-transcript,
-.o2-stage:fullscreen .o2-transcript {
-  max-width: 600px;
-  align-self: center;
 }
 .o2-stage-controls {
   position: absolute;
@@ -367,6 +371,57 @@
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+.o2-transcript-settings {
+  margin: 0;
+  padding: 18px;
+  min-width: 0;
+  border: 1px solid #293145;
+  border-radius: 6px;
+  display: grid;
+  gap: 18px;
+}
+.o2-transcript-settings legend {
+  padding: 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.o2-transcript-settings p {
+  margin: 0;
+}
+.o2-position-inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+.o2-character-colors {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.o2-character-colors input[type="color"] {
+  height: 42px;
+  padding: 4px;
+  cursor: pointer;
+}
+.o2-position-inputs input[type="range"] {
+  padding: 0;
+  accent-color: #849bff;
+  cursor: pointer;
+}
+.o2-form .o2-position-number {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.o2-position-scale {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 106px 0 0;
+  color: var(--muted, #8490a6);
+  font-size: 11px;
+}
 .o2-inline {
   display: flex;
   gap: 8px;
@@ -467,6 +522,9 @@
     max-width: 410px;
   }
   .o2-two {
+    grid-template-columns: 1fr;
+  }
+  .o2-character-colors {
     grid-template-columns: 1fr;
   }
   .ai-settings-v2 .provider-card {

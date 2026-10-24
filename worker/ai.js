@@ -38,7 +38,21 @@ const endpoints = {
   openai: "https://api.openai.com/v1",
   openrouter: "https://openrouter.ai/api/v1",
   groq: "https://api.groq.com/openai/v1",
+  nvidia: "https://integrate.api.nvidia.com/v1",
+  huggingface: "https://router.huggingface.co/v1",
+  mistral: "https://api.mistral.ai/v1",
 };
+const textContent = (content) =>
+  typeof content === "string"
+    ? content
+    : Array.isArray(content)
+      ? content
+          .filter(
+            (part) => part?.type === "text" && typeof part.text === "string",
+          )
+          .map((part) => part.text)
+          .join("")
+      : "";
 export async function generateText(
   env,
   settings,
@@ -118,6 +132,25 @@ export async function generateText(
           ?.filter((c) => c.type === "text")
           .map((c) => c.text)
           .join("");
+      } else if (p.id === "cohere") {
+        data = await jsonResponse(
+          await fetch("https://api.cohere.com/v2/chat", {
+            ...options,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + key,
+            },
+            body: JSON.stringify({
+              model: p.model,
+              max_tokens: maxTokens,
+              messages: [
+                { role: "system", content: system },
+                { role: "user", content: user },
+              ],
+            }),
+          }),
+        );
+        text = textContent(data.message?.content);
       } else {
         data = await jsonResponse(
           await fetch(endpoints[p.id] + "/chat/completions", {
@@ -139,7 +172,7 @@ export async function generateText(
             }),
           }),
         );
-        text = data.choices?.[0]?.message?.content;
+        text = textContent(data.choices?.[0]?.message?.content);
       }
       if (typeof text !== "string" || !text.trim())
         throw new ApiError("Jawaban kosong", 502);
@@ -160,11 +193,37 @@ export async function generateText(
   throw new ApiError("AI belum siap. " + failures.join("; "), 503);
 }
 
+function isChatModel(provider, model) {
+  if (!model || typeof model.id !== "string") return false;
+  if (provider === "openai")
+    return (
+      /^(gpt-|o[134])/.test(model.id) &&
+      !/audio|realtime|transcribe|tts|image|search|codex/.test(model.id)
+    );
+  if (provider === "mistral")
+    return model.capabilities?.completion_chat === true && !model.archived;
+  if (provider === "nvidia")
+    return (
+      model.capabilities?.completion_chat !== false &&
+      !/embed|rerank|reward|guard|safety|gliner|nvclip|nv-dinov2|nemotron-parse|(?:^|\/)flux|stable-diffusion|riva|parakeet|canary|whisper/i.test(
+        model.id,
+      )
+    );
+  if (provider === "huggingface")
+    return (
+      (!model.architecture?.output_modalities ||
+        model.architecture.output_modalities.includes("text")) &&
+      (!Array.isArray(model.providers) ||
+        model.providers.some((p) => p.status === "live"))
+    );
+  return true;
+}
+
 export async function listModels(env, id) {
   const provider = AI_PROVIDERS.find((p) => p.id === id);
   if (!provider) throw new ApiError("Provider tidak dikenal.");
   const key = await getCredential(env, provider.secret);
-  if (!key && id !== "openrouter")
+  if (!key && !["openrouter", "huggingface"].includes(id))
     throw new ApiError("Isi API key provider sebelum memuat model.");
   let url, headers;
   if (id === "gemini") {
@@ -174,6 +233,9 @@ export async function listModels(env, id) {
   } else if (id === "anthropic") {
     url = "https://api.anthropic.com/v1/models?limit=1000";
     headers = { "x-api-key": key, "anthropic-version": "2023-06-01" };
+  } else if (id === "cohere") {
+    url = "https://api.cohere.com/v1/models?endpoint=chat&page_size=1000";
+    headers = { Authorization: "Bearer " + key };
   } else {
     url = endpoints[id] + "/models";
     headers = key ? { Authorization: "Bearer " + key } : {};
@@ -186,29 +248,51 @@ export async function listModels(env, id) {
     }),
     8 * 1024 * 1024,
   );
+  const rawModels =
+    id === "gemini" || id === "cohere" ? data.models : data.data;
+  if (!Array.isArray(rawModels))
+    throw new ApiError("Daftar model dari provider tidak valid.", 502);
   const values =
     id === "gemini"
-      ? (data.models || [])
-          .filter((m) =>
-            m.supportedGenerationMethods?.includes("generateContent"),
+      ? rawModels
+          .filter(
+            (m) =>
+              typeof m?.name === "string" &&
+              m.supportedGenerationMethods?.includes("generateContent"),
           )
           .map((m) => ({
             id: m.name.replace(/^models\//, ""),
             name: m.displayName || m.name,
           }))
-      : (data.data || [])
-          .filter(
-            (m) =>
-              id !== "openai" ||
-              (/^(gpt-|o[134])/.test(m.id) &&
-                !/audio|realtime|transcribe|tts|image|search|codex/.test(m.id)),
-          )
-          .map((m) => ({ id: m.id, name: m.display_name || m.name || m.id }));
+      : id === "cohere"
+        ? rawModels
+            .filter(
+              (m) => m && !m.is_deprecated && m.endpoints?.includes("chat"),
+            )
+            .map((m) => ({ id: m.name, name: m.name }))
+        : rawModels
+            .filter((m) => isChatModel(id, m))
+            .map((m) => ({ id: m.id, name: m.display_name || m.name || m.id }));
+  const seen = new Set();
+  const models = values.filter((m) => {
+    if (
+      typeof m.id !== "string" ||
+      !m.id.trim() ||
+      m.id.length > 160 ||
+      seen.has(m.id)
+    )
+      return false;
+    seen.add(m.id);
+    return true;
+  });
   return {
-    models: values
-      .filter((m) => typeof m.id === "string" && m.id.length <= 160)
-      .slice(0, 1000),
-    hasMore: Boolean(data.has_more || data.nextPageToken),
+    models: models.slice(0, 1000),
+    hasMore: Boolean(
+      data.has_more ||
+      data.nextPageToken ||
+      data.next_page_token ||
+      models.length > 1000,
+    ),
     source: "provider",
   };
 }

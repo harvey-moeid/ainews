@@ -27,9 +27,18 @@ Jika API tidak tersedia, UI menyediakan demo sementara dengan label simulasi. Da
 
 ## AI dan secrets
 
-Provider: Gemini, Anthropic, OpenRouter, OpenAI, dan Groq. Halaman `/admin/ai` menyediakan dropdown model tiap provider, pemuatan daftar terbaru melalui API provider, urutan fallback, toggle aktif, serta tes respons. Konfigurasi dipakai bersama oleh editor berita dan Overlay 2. Daftar model bawaan adalah titik awal; ketersediaan mengikuti akun provider. Jika seluruh provider gagal, aplikasi menampilkan kesalahan tanpa membuat naskah palsu.
+Provider: Gemini, Anthropic, OpenRouter, OpenAI, Groq, NVIDIA NIM, Cohere, Hugging Face, dan Mistral. Halaman `/admin/ai` menyediakan dropdown model tiap provider, pemuatan daftar terbaru melalui API provider, urutan fallback, toggle aktif, serta tes respons. Konfigurasi dipakai bersama oleh editor berita dan Overlay 2. Daftar model bawaan adalah titik awal; ketersediaan mengikuti akun provider. Jika seluruh provider gagal, aplikasi menampilkan kesalahan tanpa membuat naskah palsu.
 
-Key dapat diisi lewat halaman pengaturan setelah secret Worker `AI_KEY_ENCRYPTION_SECRET` dipasang (minimal 32 karakter acak). Nilai dienkripsi AES-GCM sebelum disimpan di tabel `app_credentials`; API hanya mengembalikan status keberadaannya. Simpan master key dengan aman: menggantinya tanpa migrasi membuat key tersimpan tidak bisa dibuka. Key tidak dimasukkan ke backup JSON berita. Alternatifnya, pasang `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, dan/atau `GROQ_API_KEY` langsung sebagai secret runtime. Nilai runtime didahulukan dan tidak dapat ditimpa melalui UI. Untuk pengembangan lokal, gunakan `.dev.vars` yang diabaikan Git.
+| Provider baru | Model bawaan | Secret runtime |
+| --- | --- | --- |
+| [NVIDIA NIM](https://docs.api.nvidia.com/nim/reference/llm-apis) | `meta/llama-3.3-70b-instruct`, `meta/llama-3.1-8b-instruct`, `meta/llama-3.1-70b-instruct`, `microsoft/phi-4-mini-instruct` | `NVIDIA_API_KEY` |
+| [Cohere](https://docs.cohere.com/docs/models) | `command-a-03-2025`, `command-a-plus-05-2026`, `command-r7b-12-2024`, `command-r-08-2024`, `command-r-plus-08-2024` | `COHERE_API_KEY` |
+| [Hugging Face](https://huggingface.co/docs/inference-providers/en/tasks/chat-completion) | `Qwen/Qwen3-4B-Instruct-2507`, `meta-llama/Llama-3.3-70B-Instruct`, `Qwen/Qwen3-235B-A22B-Instruct-2507`, `openai/gpt-oss-120b` | `HUGGINGFACE_API_KEY` |
+| [Mistral](https://docs.mistral.ai/models) | `mistral-small-latest`, `mistral-medium-latest`, `mistral-large-latest`, `ministral-8b-2512`, `mistral-large-4` | `MISTRAL_API_KEY` |
+
+Provider baru awalnya nonaktif. Isi key, pilih model, aktifkan provider, atur urutannya, lalu klik **Simpan konfigurasi** sebelum **Tes respons**. **Muat model dari provider** memuat maksimal 1.000 model pada halaman pertama; jika masih ada halaman lain, UI memberitahukannya. Model yang sedang tersimpan tetap tersedia di dropdown meskipun tidak ada dalam daftar yang baru dimuat. Cohere memakai Chat V2 dan daftar model chat V1; Mistral difilter berdasarkan kemampuan chat, Hugging Face memakai router Inference Providers dan token berizin Inference Providers, sedangkan NVIDIA memakai API Catalog cloud. Daftar bawaan mengikuti dokumentasi resmi yang diperiksa 24 Oktober 2026. Akses model, persetujuan model gated, biaya, dan kuota mengikuti akun masing-masing. Integrasi ini untuk teks; OpenAI tetap digunakan untuk pilihan suara AI.
+
+Key dapat diisi lewat halaman pengaturan setelah secret Worker `AI_KEY_ENCRYPTION_SECRET` dipasang (minimal 32 karakter acak). Nilai dienkripsi AES-GCM sebelum disimpan di tabel `app_credentials`; API hanya mengembalikan status keberadaannya. Simpan master key dengan aman: menggantinya tanpa migrasi membuat key tersimpan tidak bisa dibuka. Key tidak dimasukkan ke backup JSON berita. Alternatifnya, pasang secret runtime provider sesuai `.env.example` dan tabel di atas. Nilai runtime didahulukan dan tidak dapat ditimpa melalui UI. Untuk pengembangan lokal, gunakan `.dev.vars` yang diabaikan Git.
 
 ## Overlay 2 — berita dan komentar TikTok
 
@@ -43,6 +52,10 @@ Modul tersendiri di repo ini: `/admin/overlay2` untuk pengaturan, `/overlay2` un
 6. Pilih suara browser atau **OpenAI TTS**. Suara browser memakai pilihan suara/rate/pitch presenter. Gerak mulut mengikuti event batas kata `speechSynthesis.onboundary` bila tersedia; bentuk A/I/U/E/O diperkirakan dari huruf kata, dengan mulut menutup di antara kata, tanda baca, pause, akhir suara, error, dan STOP. Browser/suara yang tidak mengirim event kata memakai perkiraan durasi teks sesuai rate. Durasi setiap huruf tetap perkiraan, bukan timing fonem aktual. OpenAI TTS memakai `tts-1`, memerlukan key OpenAI, dan menggerakkan mulut berdasarkan amplitudo audio. Tidak ada klaim sinkronisasi fonem.
 
 Judul di bawah nama host dapat diubah melalui **Overlay 2 → Tampilan & suara → Judul Overlay 2**, lalu **Simpan Overlay 2**. Pratinjau admin langsung mengikuti isian. Pemutar memperbarui pengaturan saat aktif dan setiap 10 detik saat standby. Pengaturan lama memakai judul bawaan sampai diubah.
+
+Letak kotak teks dapat diatur melalui **Overlay 2 → Posisi pertanyaan & jawaban**. Atur posisi vertikal (atas–bawah), horizontal (kiri–kanan), dan lebar kotak menggunakan slider atau angka persen. Tombol **Atas**, **Tengah**, **Bawah**, dan **Reset posisi** membantu penempatan cepat. Pertanyaan dan jawaban bergerak bersama dalam satu kotak; teks berita menggunakan letak yang sama. Pratinjau menampilkan contoh yang langsung mengikuti perubahan. Klik **Simpan Overlay 2** agar posisi tersimpan dan dipakai pemutar, termasuk pada ponsel dan layar penuh. Pengaturan lama memakai posisi bawaan.
+
+Penampilan host dapat diubah melalui **Overlay 2 → Karakter presenter**: pilih tanpa rambut, pendek, bob, atau mohawk; tambahkan kacamata atau headset dengan mikrofon; lalu atur warna rambut, wajah wireframe, dan mata. Pratinjau mengikuti perubahan tanpa memuat ulang wajah. Klik **Simpan Overlay 2** untuk menyimpan, atau **Reset karakter** untuk mengembalikan isian ke tampilan awal sebelum disimpan. Rambut dan aksesori berupa model 3D bawaan yang mengikuti gerak kepala; animasi bicara tetap berjalan. Pengaturan lama tetap memakai wajah tanpa rambut dan aksesori. Editor ini belum menyediakan unggah model rambut/aksesori sendiri.
 
 Tombol **Layar penuh untuk siaran** tersedia sejak standby. Tampilan memenuhi layar desktop maupun ponsel; jika Fullscreen API tidak tersedia, area siaran memenuhi jendela browser. Arahkan pointer ke sudut kanan atas untuk kontrol mulai/hentikan sesi dan **Keluar layar penuh**, atau tekan Escape untuk keluar. Pada layar sentuh, kontrol tersedia di bawah.
 
@@ -66,6 +79,8 @@ node tests/core.test.mjs
 npm run build
 node tests/browser.mjs
 node tests/overlay2-browser.mjs
+node tests/overlay2-character-browser.mjs
+node tests/ai-providers-browser.mjs
 node tests/speech-mouth-browser.mjs
 node tests/api.mjs
 node tests/failure.test.mjs

@@ -129,6 +129,7 @@ export default function ProviderSettings({
                 <label>
                   Model {provider.name}
                   <select
+                    aria-label={"Model " + provider.name}
                     value={provider.model}
                     onChange={(e) =>
                       update(provider.id, "model", e.target.value)
@@ -182,6 +183,18 @@ export default function ProviderSettings({
                     }
                   />
                 </label>
+                {definition.keyHelp && (
+                  <p className="o2-help">
+                    {definition.keyHelp}{" "}
+                    <a
+                      href={definition.docsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Lihat model & dokumentasi ↗
+                    </a>
+                  </p>
+                )}
                 <button
                   className="btn"
                   disabled={
