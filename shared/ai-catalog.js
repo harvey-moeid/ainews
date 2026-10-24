@@ -1,3 +1,5 @@
+import { CHARACTER_DEFAULTS } from "./character.js";
+
 export const AI_PROVIDERS = [
   {
     id: "gemini",
@@ -68,6 +70,10 @@ export const OVERLAY2_DEFAULTS = {
   voiceMode: "browser",
   voice: "onyx",
   loopNews: true,
+  transcriptX: 50,
+  transcriptY: 60,
+  transcriptWidth: 88,
+  ...CHARACTER_DEFAULTS,
   prompt:
     "Kamu Nara, host berita lokal berbahasa Indonesia. Jawab dengan hangat, ringkas, dan netral. Jangan mengarang informasi aktual. Maksimal 60 kata.",
 };

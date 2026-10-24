@@ -24,6 +24,27 @@ try {
   const title = "Kabar Warga · Pasuruan";
   await page.getByLabel("Judul Overlay 2", { exact: true }).fill(title);
   assert.equal(await page.locator(".o2-preview header p").textContent(), title);
+  await page.getByRole("button", { name: "Bawah", exact: true }).click();
+  assert.equal(
+    await page.getByLabel("Posisi vertikal (%)", { exact: true }).inputValue(),
+    "90",
+  );
+  await page.getByRole("button", { name: "Reset posisi", exact: true }).click();
+  assert.equal(
+    await page.getByLabel("Posisi vertikal (%)", { exact: true }).inputValue(),
+    String(OVERLAY2_DEFAULTS.transcriptY),
+  );
+  await page.getByLabel("Posisi horizontal (%)", { exact: true }).fill("25");
+  await page.getByLabel("Posisi vertikal (%)", { exact: true }).fill("90");
+  await page.getByLabel("Lebar kotak (%)", { exact: true }).fill("70");
+  const layout = await page
+    .locator(".o2-preview .o2-transcript")
+    .evaluate((el) => ({
+      x: el.style.getPropertyValue("--o2-transcript-x"),
+      y: el.style.getPropertyValue("--o2-transcript-y"),
+      width: el.style.getPropertyValue("--o2-transcript-width"),
+    }));
+  assert.deepEqual(layout, { x: "25%", y: "90%", width: "70%" });
   await Promise.all([
     page.waitForResponse(
       (r) =>
@@ -36,6 +57,20 @@ try {
   assert.equal(
     await page.getByLabel("Judul Overlay 2", { exact: true }).inputValue(),
     title,
+  );
+  assert.equal(
+    await page
+      .getByLabel("Posisi horizontal (%)", { exact: true })
+      .inputValue(),
+    "25",
+  );
+  assert.equal(
+    await page.getByLabel("Posisi vertikal (%)", { exact: true }).inputValue(),
+    "90",
+  );
+  assert.equal(
+    await page.getByLabel("Lebar kotak (%)", { exact: true }).inputValue(),
+    "70",
   );
   assert.equal(
     await page.getByLabel("Alamat konektor").inputValue(),
@@ -66,6 +101,12 @@ try {
     .waitFor();
   await page.waitForTimeout(500);
   assert.equal(await page.locator(".o2-stage header p").textContent(), title);
+  assert.equal(
+    await page
+      .locator(".o2-transcript")
+      .evaluate((el) => el.style.getPropertyValue("--o2-transcript-y")),
+    "90%",
+  );
   const enterFullscreen = () =>
     page
       .getByRole("button", { name: "Layar penuh untuk siaran", exact: true })
@@ -255,7 +296,7 @@ try {
   assert.equal(lease, null);
   assert.deepEqual(errors, []);
   console.log(
-    "Overlay 2 browser passed: editable title persistence and preview, native fullscreen in standby, mobile fullscreen fallback and exit, five model dropdowns, responsive canvas, sentence-boundary reply, news resume, one audio job, session stop.",
+    "Overlay 2 browser passed: editable title and transcript layout persistence, preview and position presets, native fullscreen in standby, mobile fullscreen fallback and exit, five model dropdowns, responsive canvas, sentence-boundary reply, news resume, one audio job, session stop.",
   );
 } finally {
   await browser.close();

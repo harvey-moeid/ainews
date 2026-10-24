@@ -120,7 +120,7 @@ const story = {
   published_at: "2026-10-20T08:00:00Z",
 };
 
-test("Overlay 2 title persists through settings and player state; legacy settings retain the default", async () => {
+test("Overlay 2 title, transcript layout and character persist through settings and player state", async () => {
   const { sqlite, env } = database();
   try {
     const title = "Kabar Warga · Pasuruan";
@@ -129,13 +129,32 @@ test("Overlay 2 title persists through settings and player state; legacy setting
       "/settings",
       {
         ...settings,
-        overlay2: { ...settings.overlay2, title },
+        overlay2: {
+          ...settings.overlay2,
+          title,
+          transcriptX: 25,
+          transcriptY: 90,
+          transcriptWidth: 70,
+          hairStyle: "bob",
+          accessory: "glasses",
+          hairColor: "#9b537b",
+          faceColor: "#3479ab",
+          eyeColor: "#45da92",
+        },
       },
       "PUT",
     );
     assert.equal(saved.status, 200);
     const state = await request(env, "/overlay2/state", undefined, "GET");
     assert.equal(state.data.config.title, title);
+    assert.equal(state.data.config.transcriptX, 25);
+    assert.equal(state.data.config.transcriptY, 90);
+    assert.equal(state.data.config.transcriptWidth, 70);
+    assert.equal(state.data.config.hairStyle, "bob");
+    assert.equal(state.data.config.accessory, "glasses");
+    assert.equal(state.data.config.hairColor, "#9b537b");
+    assert.equal(state.data.config.faceColor, "#3479ab");
+    assert.equal(state.data.config.eyeColor, "#45da92");
     const { title: unused, ...legacy } = state.data.config;
     assert.equal(
       validateOverlay2(legacy).title,

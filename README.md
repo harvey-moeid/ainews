@@ -44,6 +44,10 @@ Modul tersendiri di repo ini: `/admin/overlay2` untuk pengaturan, `/overlay2` un
 
 Judul di bawah nama host dapat diubah melalui **Overlay 2 → Tampilan & suara → Judul Overlay 2**, lalu **Simpan Overlay 2**. Pratinjau admin langsung mengikuti isian. Pemutar memperbarui pengaturan saat aktif dan setiap 10 detik saat standby. Pengaturan lama memakai judul bawaan sampai diubah.
 
+Letak kotak teks dapat diatur melalui **Overlay 2 → Posisi pertanyaan & jawaban**. Atur posisi vertikal (atas–bawah), horizontal (kiri–kanan), dan lebar kotak menggunakan slider atau angka persen. Tombol **Atas**, **Tengah**, **Bawah**, dan **Reset posisi** membantu penempatan cepat. Pertanyaan dan jawaban bergerak bersama dalam satu kotak; teks berita menggunakan letak yang sama. Pratinjau menampilkan contoh yang langsung mengikuti perubahan. Klik **Simpan Overlay 2** agar posisi tersimpan dan dipakai pemutar, termasuk pada ponsel dan layar penuh. Pengaturan lama memakai posisi bawaan.
+
+Penampilan host dapat diubah melalui **Overlay 2 → Karakter presenter**: pilih tanpa rambut, pendek, bob, atau mohawk; tambahkan kacamata atau headset dengan mikrofon; lalu atur warna rambut, wajah wireframe, dan mata. Pratinjau mengikuti perubahan tanpa memuat ulang wajah. Klik **Simpan Overlay 2** untuk menyimpan, atau **Reset karakter** untuk mengembalikan isian ke tampilan awal sebelum disimpan. Rambut dan aksesori berupa model 3D bawaan yang mengikuti gerak kepala; animasi bicara tetap berjalan. Pengaturan lama tetap memakai wajah tanpa rambut dan aksesori. Editor ini belum menyediakan unggah model rambut/aksesori sendiri.
+
 Tombol **Layar penuh untuk siaran** tersedia sejak standby. Tampilan memenuhi layar desktop maupun ponsel; jika Fullscreen API tidak tersedia, area siaran memenuhi jendela browser. Arahkan pointer ke sudut kanan atas untuk kontrol mulai/hentikan sesi dan **Keluar layar penuh**, atau tekan Escape untuk keluar. Pada layar sentuh, kontrol tersedia di bawah.
 
 Pemutar berbagi lease audio 90 detik dengan `/live`, memperpanjangnya sekitar 20 detik, dan berhenti jika lease/sesi berubah atau pembacaan state gagal. REST polling hanya berjalan saat pemutar aktif, sekitar setiap 3,5 detik ditambah latensi konektor. Feed diambil maksimal 100 event terbaru; event yang lebih tua dari dua menit, spam, komentar berulang, atau melebihi antrean dibuang. Pada LIVE sangat ramai atau browser yang ditangguhkan, beberapa event bisa terlewat. Tidak ada jaminan pengiriman setiap komentar; tangkap jendela browser aktif agar audio tidak ditangguhkan. Riwayat komentar/event dibersihkan setelah enam jam, hak gift sesi aktif dipertahankan sampai sesi diganti.
@@ -66,6 +70,7 @@ node tests/core.test.mjs
 npm run build
 node tests/browser.mjs
 node tests/overlay2-browser.mjs
+node tests/overlay2-character-browser.mjs
 node tests/speech-mouth-browser.mjs
 node tests/api.mjs
 node tests/failure.test.mjs

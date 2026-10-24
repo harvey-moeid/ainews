@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import { CHARACTER_DEFAULTS } from "../../shared/character.js";
+import {
+  createCharacterDetails,
+  disposeCharacterDetails,
+} from "./character.js";
 
 export class VirtualFace {
   constructor(canvas, { preview = false } = {}) {
@@ -25,6 +30,7 @@ export class VirtualFace {
     this.scene.add(light);
     this.meshes = [];
     this.buildHead();
+    this.setAppearance(CHARACTER_DEFAULTS);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(canvas);
     this.resize();
@@ -125,18 +131,16 @@ export class VirtualFace {
         }),
       ),
     );
-    this.head.add(
-      new THREE.Mesh(
-        geometry,
-        new THREE.MeshBasicMaterial({
-          color: 0x5363ca,
-          wireframe: true,
-          transparent: true,
-          opacity: 0.48,
-        }),
-      ),
-    );
+    this.wireMaterial = new THREE.MeshBasicMaterial({
+      color: 0x5363ca,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.48,
+    });
+    this.head.add(new THREE.Mesh(geometry, this.wireMaterial));
     this.eyes = [];
+    this.eyeColors = [];
+    this.earMaterials = [];
     for (const side of [-1, 1]) {
       const eye = new THREE.Group();
       eye.position.set(side * 0.46, 0.38, 0.837);
@@ -182,6 +186,12 @@ export class VirtualFace {
       eye.add(glint);
       this.head.add(eye);
       this.eyes.push(eye);
+      this.eyeColors.push({
+        iris: iris.material,
+        ring: ring.material,
+        pupil: pupil.material,
+        glint: glint.material,
+      });
       const ear = new THREE.Mesh(
         new THREE.SphereGeometry(0.19, 12, 16),
         new THREE.MeshBasicMaterial({
@@ -194,6 +204,7 @@ export class VirtualFace {
       ear.scale.set(0.55, 1.8, 0.65);
       ear.position.set(side * 1.09, -0.03, -0.05);
       this.head.add(ear);
+      this.earMaterials.push(ear.material);
     }
     const mouth = new THREE.Mesh(
       new THREE.CircleGeometry(1, 40),
@@ -203,6 +214,41 @@ export class VirtualFace {
     mouth.scale.set(0.32, 0.053, 1);
     this.head.add(mouth);
     this.mouth = mouth;
+  }
+
+  setAppearance(config) {
+    const appearance = Object.fromEntries(
+      Object.entries(CHARACTER_DEFAULTS).map(([key, fallback]) => [
+        key,
+        config[key] ?? fallback,
+      ]),
+    );
+    if (
+      this.appearance &&
+      Object.keys(appearance).every(
+        (key) => appearance[key] === this.appearance[key],
+      )
+    )
+      return;
+    this.wireMaterial.color.set(appearance.faceColor);
+    this.earMaterials.forEach((material) =>
+      material.color.set(appearance.faceColor).multiplyScalar(0.7),
+    );
+    this.eyeColors.forEach(({ iris, ring, pupil, glint }) => {
+      iris.color.set(appearance.eyeColor);
+      ring.color.set(appearance.eyeColor).multiplyScalar(0.5);
+      pupil.color.set(appearance.eyeColor).multiplyScalar(0.3);
+      glint.color
+        .set(appearance.eyeColor)
+        .lerp(new THREE.Color(0xffffff), 0.75);
+    });
+    if (this.details) {
+      this.head.remove(this.details);
+      disposeCharacterDetails(this.details);
+    }
+    this.details = createCharacterDetails(appearance);
+    this.head.add(this.details);
+    this.appearance = appearance;
   }
 
   resize() {
@@ -255,10 +301,7 @@ export class VirtualFace {
   dispose() {
     cancelAnimationFrame(this.frame);
     this.observer.disconnect();
-    this.scene.traverse((o) => {
-      o.geometry?.dispose();
-      o.material?.dispose();
-    });
+    disposeCharacterDetails(this.scene);
     this.renderer.dispose();
   }
 }
