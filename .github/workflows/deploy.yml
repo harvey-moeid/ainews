@@ -1,0 +1,161 @@
+name: Deploy ainews to Cloudflare
+
+# Intentionally manual: a push or PR never deploys production.
+on:
+  workflow_dispatch:
+    inputs:
+      apply_migrations:
+        description: "Apply pending production D1 migrations before deploying"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ainews-cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Test, build, and check production config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CI: "true"
+    steps:
+      - name: Require main branch
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Production deploys must be dispatched from main."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build frontend and Worker
+        run: npm run build
+
+      - name: Validate build and production target
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, existsSync } from 'node:fs';
+          const config = JSON.parse(readFileSync('wrangler.production.json', 'utf8'));
+          const expected = {
+            name: 'ainews',
+            db: 'ainews-db',
+            bucket: 'ainews-content'
+          };
+          if (config.name !== expected.name ||
+              config.vars?.AUTH_MODE !== 'cloudflare-access' ||
+              config.vars?.DEV_AUTH !== undefined ||
+              config.d1_databases?.[0]?.binding !== 'DB' ||
+              config.d1_databases?.[0]?.database_name !== expected.db ||
+              config.r2_buckets?.[0]?.binding !== 'BUCKET' ||
+              config.r2_buckets?.[0]?.bucket_name !== expected.bucket) {
+            throw new Error('Production Wrangler target or authentication configuration is unexpected.');
+          }
+          for (const file of ['dist/client/index.html', 'dist/server/index.js',
+                               'drizzle/0000_newsroom.sql', 'drizzle/0001_overlay2.sql',
+                               'drizzle/0002_social_sources.sql']) {
+            if (!existsSync(file)) throw new Error('Missing required file: ' + file);
+          }
+          NODE
+
+  deploy:
+    name: Apply migrations and deploy Worker
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment:
+      name: production
+      url: https://ainews.harveymoeid.workers.dev
+    env:
+      CI: "true"
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Check credentials
+        shell: bash
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "::error::Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as GitHub secrets."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: List pending D1 migrations
+        run: npx wrangler d1 migrations list DB --remote --config wrangler.production.json
+
+      - name: Apply production D1 migrations
+        if: ${{ inputs.apply_migrations }}
+        run: npx wrangler d1 migrations apply DB --remote --config wrangler.production.json
+
+      - name: Deploy ainews Worker
+        run: npx wrangler deploy --config wrangler.production.json
+
+      - name: Check Cloudflare Access gate (unauthenticated)
+        shell: bash
+        run: |
+          status=$(curl --silent --show-error --max-time 20 --max-redirs 0 \
+            --output /dev/null --write-out '%{http_code}' \
+            'https://ainews.harveymoeid.workers.dev/')
+          echo "Unauthenticated response: HTTP $status"
+          case "$status" in
+            301|302|303|307|308|401|403)
+              echo "Cloudflare Access gate responded as expected."
+              ;;
+            *)
+              echo "::error::Unexpected unauthenticated response (HTTP $status). Inspect Access policy and runtime."
+              exit 1
+              ;;
+          esac
+
+      - name: Publish deployment summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### ainews production deployment"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Target: https://ainews.harveymoeid.workers.dev"
+            echo "- D1 migrations requested: ${{ inputs.apply_migrations }}"
+            echo "- Job status: ${{ job.status }}"
+            echo "- Authenticated app/API and voice playback require separate operator checks."
+          } >> "$GITHUB_STEP_SUMMARY"
