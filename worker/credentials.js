@@ -2,6 +2,8 @@ import { ApiError } from "./core.js";
 import { AI_PROVIDERS } from "../shared/ai-catalog.js";
 
 const allowed = new Set([...AI_PROVIDERS.map((p) => p.secret), "TLK_API_KEY"]);
+const allowedName = (name) =>
+  allowed.has(name) || /^SOCIAL_SOURCE:[a-zA-Z0-9_-]{1,80}$/.test(name);
 async function encryptionKey(env) {
   if (
     typeof env.AI_KEY_ENCRYPTION_SECRET !== "string" ||
@@ -53,8 +55,8 @@ export async function decryptCredential(env, name, ciphertext) {
   );
   return new TextDecoder().decode(decrypted);
 }
-export async function getCredential(env, name) {
-  if (!allowed.has(name)) throw new ApiError("Nama key tidak dikenal.");
+export async function getCredential(env, name, context = name) {
+  if (!allowedName(name)) throw new ApiError("Nama key tidak dikenal.");
   // Environment is authoritative; a blank settings field never erases a working key.
   if (env[name]) return String(env[name]);
   const row = await env.DB.prepare(
@@ -64,7 +66,7 @@ export async function getCredential(env, name) {
     .first();
   if (!row) return "";
   try {
-    return await decryptCredential(env, name, row.ciphertext);
+    return await decryptCredential(env, context, row.ciphertext);
   } catch {
     throw new ApiError(
       "Key tersimpan tidak dapat dibuka. Periksa master key enkripsi di runtime.",

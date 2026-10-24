@@ -2071,6 +2071,12 @@ option {
   display: grid;
   gap: 19px;
 }
+.caption-original {
+  padding: 14px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
 .source-editor > .btn {
   margin-top: 3px;
 }

@@ -18,6 +18,20 @@ Jika API tidak tersedia, UI menyediakan demo sementara dengan label simulasi. Da
 
 ## Alur operator
 
+Pilihan **Cakupan** pada sumber dan berita mendukung **Indonesia** serta 514
+kota/kabupaten di 38 provinsi, dikelompokkan menurut provinsi. Sumber dan berita
+baru memakai Indonesia sebagai nilai awal; berita baru dari filter wilayah
+mengikuti wilayah yang dipilih. Filter **Semua wilayah** menampilkan semua berita,
+sedangkan **Indonesia** hanya menampilkan berita yang dicatat dengan cakupan
+nasional. Nilai wilayah berita dan sumber lama tetap dipertahankan.
+
+RSS dengan cakupan Indonesia menerima semua item dari feed (hingga batas per
+refresh). RSS kota/kabupaten mencocokkan nama daerah pada judul atau isi feed;
+ini pencocokan teks, bukan deteksi lokasi otomatis. Periksa atribusi dan lokasi
+sebelum menyetujui berita. Daftar wilayah disertakan dalam aplikasi dan tidak
+memerlukan API eksternal. Asal data dan lisensinya ada di
+[`shared/regions.NOTICE`](shared/regions.NOTICE).
+
 1. Tambah sumber RSS dengan URL HTTPS dan catatan izin; refresh manual atau buka dashboard. Feed dicache selama lima menit dan dikunci per sumber. Instagram/TikTok memerlukan akses resmi atau input manual.
 2. Tambah berita, tulis bahan sumber dan atribusi, buat atau tulis naskah, pratinjau suara, tinjau, lalu setujui. Berita sensitif meminta persetujuan manusia secara eksplisit.
 3. Tambahkan berita siap tayang ke antrean. Prioritas breaking > utama > reguler; item aktif tidak dipindahkan.
@@ -39,6 +53,88 @@ Provider: Gemini, Anthropic, OpenRouter, OpenAI, Groq, NVIDIA NIM, Cohere, Huggi
 Provider baru awalnya nonaktif. Isi key, pilih model, aktifkan provider, atur urutannya, lalu klik **Simpan konfigurasi** sebelum **Tes respons**. **Muat model dari provider** memuat maksimal 1.000 model pada halaman pertama; jika masih ada halaman lain, UI memberitahukannya. Model yang sedang tersimpan tetap tersedia di dropdown meskipun tidak ada dalam daftar yang baru dimuat. Cohere memakai Chat V2 dan daftar model chat V1; Mistral difilter berdasarkan kemampuan chat, Hugging Face memakai router Inference Providers dan token berizin Inference Providers, sedangkan NVIDIA memakai API Catalog cloud. Daftar bawaan mengikuti dokumentasi resmi yang diperiksa 24 Oktober 2026. Akses model, persetujuan model gated, biaya, dan kuota mengikuti akun masing-masing. Integrasi ini untuk teks; OpenAI tetap digunakan untuk pilihan suara AI.
 
 Key dapat diisi lewat halaman pengaturan setelah secret Worker `AI_KEY_ENCRYPTION_SECRET` dipasang (minimal 32 karakter acak). Nilai dienkripsi AES-GCM sebelum disimpan di tabel `app_credentials`; API hanya mengembalikan status keberadaannya. Simpan master key dengan aman: menggantinya tanpa migrasi membuat key tersimpan tidak bisa dibuka. Key tidak dimasukkan ke backup JSON berita. Alternatifnya, pasang secret runtime provider sesuai `.env.example` dan tabel di atas. Nilai runtime didahulukan dan tidak dapat ditimpa melalui UI. Untuk pengembangan lokal, gunakan `.dev.vars` yang diabaikan Git.
+
+## Caption profil Instagram dan TikTok
+
+Terapkan migrasi `0002_social_sources.sql` sebelum menjalankan versi ini.
+Sumber sosial lama memakai mode manual sampai dikonfigurasi ulang.
+
+**Tanpa API:** buka **Sumber berita → Tambah sumber**, pilih Instagram atau TikTok,
+isi URL profil, cakupan, dan catatan izin. Pilih **Tanpa API · input caption manual**.
+Setelah menyimpan, klik **Import caption**, isi tautan postingan, tanggal aslinya,
+dan caption. Editor terbuka dengan caption sebagai naskah draft. **Preview suara**
+membacakan naskah tersebut; **Ringkas caption dengan AI** membuat naskah ringkas
+tanpa menimpa caption asli (minimal 100 karakter dan provider AI aktif).
+**Gunakan caption asli** mengembalikan naskah ke caption. Tinjau, setujui, lalu
+tambahkan ke antrean untuk dibacakan di LIVE atau Overlay 2. Import manual tidak
+mengambil data dari URL profil atau postingan secara otomatis.
+
+**API resmi:** pilih mode API pada sumber dan isi token di form. Penyimpanan token
+memerlukan `AI_KEY_ENCRYPTION_SECRET`, sama seperti key AI. Token tersimpan per
+sumber dengan AES-GCM, tidak dikembalikan ke browser, dan tidak masuk backup berita.
+Kolom token kosong mempertahankan token untuk koneksi yang sama. Mengubah platform,
+mode, atau origin konektor menghapus token lama kecuali token baru diisi.
+
+- Instagram menggunakan Graph API dengan Facebook Login, ID akun profesional,
+  dan token yang memiliki izin membaca media. Akun sendiri dibaca melalui
+  `/{ig-user-id}/media`; profil Business/Creator lain melalui Business Discovery
+  sesuai akses aplikasi Meta. Profil pribadi tidak didukung jalur API ini.
+  Versi default `v25.0` dapat diubah dengan `INSTAGRAM_GRAPH_VERSION` di runtime.
+  Lihat [Instagram Platform](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/)
+  dan [Business Discovery](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/business-discovery).
+- TikTok menggunakan token Display API **milik profil sumber** dengan scope
+  `user.info.profile` dan `video.list`. Username diverifikasi sebelum video diambil.
+  Token akun lain tidak dapat membaca profil publik sembarang. Lihat
+  [Get User Info](https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info)
+  dan [List Videos](https://developers.tiktok.com/docs/en/tiktok-api-v2-video-list).
+
+Penerbitan token dan OAuth dilakukan di aplikasi provider Anda; aplikasi ini belum
+menyediakan login OAuth atau refresh token otomatis. Perbarui access token di sumber
+jika kedaluwarsa. URL profil saja tidak memberikan izin API. Tidak ada scraping
+atau mekanisme melewati login/challenge platform.
+
+**Konektor profil:** untuk layanan lain yang Anda operasikan, isi origin HTTPS
+publik dan API key. Kontrak konektor adalah `POST /api/v1/social/posts`, header
+`Authorization: Bearer <key>`, dengan JSON:
+
+```json
+{
+  "platform": "instagram",
+  "profileUrl": "https://www.instagram.com/redaksi/",
+  "username": "redaksi",
+  "limit": 10
+}
+```
+
+Kembalikan profil yang sama beserta postingan terbaru dalam format berikut:
+
+```json
+{
+  "profile": { "username": "redaksi" },
+  "posts": [
+    {
+      "id": "posting-123",
+      "caption": "Caption asli postingan.",
+      "url": "https://www.instagram.com/p/Abc123/",
+      "publishedAt": "2026-10-20T08:00:00Z"
+    }
+  ]
+}
+```
+
+Untuk TikTok, gunakan `platform: "tiktok"`, URL profil `https://www.tiktok.com/@redaksi/`,
+dan tautan postingan `https://www.tiktok.com/@redaksi/video/1234567890`. Konektor
+TikTok LIVE untuk komentar/gift tidak otomatis mendukung kontrak postingan ini.
+Implementasi dan akses data konektor tetap perlu disediakan oleh operator.
+
+Klik **Ambil caption terbaru** untuk API/konektor. Maksimal 10 postingan terbaru per
+refresh, dengan cache 5 menit; tidak ada polling terjadwal ketika dashboard ditutup.
+Caption kosong, tanggal tidak valid, tautan di luar platform/profil, materi di luar
+cakupan daerah, dan duplikat dilewati. Kegagalan akses muncul pada status sumber.
+Caption maksimal 12.000 karakter, disimpan tanpa pemotongan diam-diam.
+Semua hasil otomatis adalah draft dengan naskah caption asli, tanpa panggilan AI
+otomatis dan tanpa mengunduh video/foto. Pembacaan caption tidak membuktikan
+kebenaran klaim dalam postingan.
 
 ## Overlay 2 — berita dan komentar TikTok
 
@@ -78,6 +174,8 @@ Pemutar berbagi lease audio 90 detik dengan `/live`, memperpanjangnya sekitar 20
 node tests/core.test.mjs
 npm run build
 node tests/browser.mjs
+node tests/coverage-browser.mjs
+node tests/social-browser.mjs
 node tests/overlay2-browser.mjs
 node tests/overlay2-character-browser.mjs
 node tests/ai-providers-browser.mjs
@@ -90,6 +188,9 @@ node tests/remote.mjs
 ```
 
 Tes browser memerlukan Chromium pada `/usr/bin/chromium`, serta API lokal dan Vite aktif. Tes membuat materi uji dalam database lokal. Jangan arahkan tes ke produksi. Migrasi produksi dikemas di `dist/.openai/drizzle/`. Build menghasilkan Worker mandiri dengan aset frontend dan font lokal tertanam, tanpa dependensi CDN runtime.
+
+Tes `coverage-browser.mjs` dan `social-browser.mjs` memakai frontend hasil build langsung dari Worker
+lokal pada port 8787; Vite tidak diperlukan untuk tes ini.
 
 ## Deployment Cloudflare Workers langsung
 

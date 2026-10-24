@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "node:fs";
-import worker, { saveStory } from "../worker/index.js";
+import { saveStory } from "../worker/index.js";
+import { database, request } from "./helpers.mjs";
 import {
   normalizeEvent,
   ingestEvents,
@@ -18,87 +17,12 @@ import { answerWithNews, retrieveNews } from "../worker/rag.js";
 import { generateText, listModels } from "../worker/ai.js";
 import { initialSettings } from "../src/data.js";
 
-function database() {
-  const sqlite = new DatabaseSync(":memory:");
-  for (const name of ["0000_newsroom.sql", "0001_overlay2.sql"])
-    sqlite.exec(
-      readFileSync(new URL("../drizzle/" + name, import.meta.url), "utf8"),
-    );
-  const DB = {
-    prepare(sql) {
-      const statement = sqlite.prepare(sql);
-      let args = [];
-      return {
-        bind(...values) {
-          args = values;
-          return this;
-        },
-        async first() {
-          return statement.get(...args) || null;
-        },
-        async all() {
-          return { results: statement.all(...args) };
-        },
-        execute() {
-          return { meta: { changes: Number(statement.run(...args).changes) } };
-        },
-        async run() {
-          return this.execute();
-        },
-      };
-    },
-    async batch(statements) {
-      sqlite.exec("BEGIN");
-      try {
-        const result = statements.map((s) => s.execute());
-        sqlite.exec("COMMIT");
-        return result;
-      } catch (error) {
-        sqlite.exec("ROLLBACK");
-        throw error;
-      }
-    },
-  };
-  const objects = new Map();
-  return {
-    sqlite,
-    env: {
-      DB,
-      DEV_AUTH: "1",
-      AI_KEY_ENCRYPTION_SECRET: "test-master-key-only-not-a-real-secret-123",
-      BUCKET: {
-        async put(key, value) {
-          objects.set(key, value);
-        },
-        async get(key) {
-          return objects.has(key)
-            ? { json: async () => JSON.parse(objects.get(key)) }
-            : null;
-        },
-      },
-    },
-  };
-}
 const settings = {
   ...initialSettings,
   aiProviders: initialSettings.aiProviders.map((p) => ({
     ...p,
     enabled: p.id === "openai",
   })),
-};
-const request = async (env, path, value, method = "POST") => {
-  const response = await worker.fetch(
-    new Request("https://ainews.test/api" + path, {
-      method,
-      headers: {
-        Origin: "https://ainews.test",
-        "Content-Type": "application/json",
-      },
-      ...(method === "GET" ? {} : { body: JSON.stringify(value) }),
-    }),
-    env,
-  );
-  return { status: response.status, data: await response.json() };
 };
 const event = (id, kind, username, room = "room-a", extra = {}) => ({
   id,
@@ -538,6 +462,75 @@ test("provider fallback skips failed provider and live model list filters non-ch
       (await listModels(env, "openai")).models.map((m) => m.id),
       ["gpt-4.1-mini"],
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("national and city sources persist coverage and refresh RSS outside Pasuruan", async (t) => {
+  const { sqlite, env } = database();
+  const feed = `<rss><channel>
+    <item><title>Bandung membuka layanan warga</title><description>Layanan baru di Bandung.</description><link>https://example.com/bandung</link></item>
+    <item><title>Surabaya memperbaiki jalan</title><description>Perbaikan jalan di Surabaya.</description><link>https://example.com/surabaya</link></item>
+    <item><title>Kebijakan ekonomi nasional</title><description>Pengumuman pemerintah pusat.</description><link>https://example.com/nasional</link></item>
+  </channel></rss>`;
+  t.mock.method(globalThis, "fetch", async () => new Response(feed));
+  try {
+    for (const region of ["Kota Bandung", "Indonesia"]) {
+      const result = await request(env, "/sources", {
+        id: region,
+        name: region,
+        type: "RSS",
+        url: "https://example.com/feed",
+        region,
+        active: true,
+        permission: "Feed untuk pengujian lokal.",
+      });
+      assert.equal(result.status, 200);
+      assert.equal(
+        sqlite.prepare("SELECT region FROM news_sources WHERE id=?").get(region)
+          .region,
+        region,
+      );
+      const refresh = await request(env, "/refresh", {
+        id: region,
+        force: true,
+      });
+      assert.equal(
+        refresh.data.results[0].added,
+        region === "Indonesia" ? 2 : 1,
+      );
+    }
+    const news = sqlite.prepare("SELECT title,region FROM news_stories").all();
+    assert.equal(news.length, 3);
+    assert.equal(
+      news.find((item) => item.title.startsWith("Bandung")).region,
+      "Kota Bandung",
+    );
+    assert.equal(
+      news.find((item) => item.title.startsWith("Surabaya")).region,
+      "Indonesia",
+    );
+    const invalid = await request(env, "/sources", {
+      name: "Invalid",
+      type: "RSS",
+      url: "https://example.com/feed",
+      region: "Kota Fiktif",
+      permission: "Uji",
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal(
+      sqlite.prepare("SELECT COUNT(*) count FROM news_sources").get().count,
+      2,
+    );
+    const saved = await request(env, "/news", {
+      ...story,
+      source_url: "https://example.com/new-story",
+      region: "Kota Jayapura",
+    });
+    assert.equal(saved.status, 200);
+    const reloaded = await request(env, "/news/" + saved.data.id, null, "GET");
+    assert.equal(reloaded.data.region, "Kota Jayapura");
   } finally {
     sqlite.close();
   }

@@ -1,3 +1,5 @@
+import { isRegion } from "../shared/regions.js";
+
 export class ApiError extends Error {
   constructor(message, status = 400) {
     super(message);
@@ -21,8 +23,8 @@ export function validateStory(input) {
     x[key] = String(x[key] || "").trim();
   if (x.title.length < 5 || x.title.length > 240)
     throw new ApiError("Judul harus 5–240 karakter.");
-  if (!["Kota Pasuruan", "Kabupaten Pasuruan"].includes(x.region))
-    throw new ApiError("Pilih wilayah Pasuruan.");
+  if (!isRegion(x.region))
+    throw new ApiError("Pilih Indonesia atau kota/kabupaten yang tersedia.");
   if (!["draft", "review", "approved", "archived"].includes(x.status))
     throw new ApiError("Status tidak valid.");
   if (!["reguler", "utama", "breaking"].includes(x.priority))
@@ -53,6 +55,20 @@ export function validateStory(input) {
   return x;
 }
 export function normalizeFingerprint(x) {
+  // Instagram shortcodes are case-sensitive; TikTok video IDs are global.
+  try {
+    const url = new URL(x.source_url);
+    if (["instagram.com", "www.instagram.com"].includes(url.hostname)) {
+      const post = url.pathname.match(/^\/(?:p|reel|tv)\/([a-zA-Z0-9_-]+)\/?$/);
+      if (post) return "instagram:" + post[1];
+    }
+    if (["tiktok.com", "www.tiktok.com"].includes(url.hostname)) {
+      const post = url.pathname.match(/^\/@[^/]+\/video\/(\d+)\/?$/);
+      if (post) return "tiktok:" + post[1];
+    }
+  } catch {
+    /* Ordinary stories can have an empty source URL. */
+  }
   return (x.source_url || x.title)
     .toLowerCase()
     .replace(/[?#].*$/, "")

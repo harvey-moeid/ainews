@@ -6,6 +6,7 @@ import {
   normalizeFingerprint,
   validateQueue,
 } from "../worker/core.js";
+import { REGION_GROUPS, matchesCoverage } from "../shared/regions.js";
 const story = {
   title: "Informasi Pasuruan terbaru",
   text: "Materi yang sah",
@@ -54,6 +55,50 @@ test("duplicate fingerprint ignores source tracking query", () =>
     }),
     normalizeFingerprint(story),
   ));
+test("social post deduplication preserves Instagram shortcode case and TikTok video identity", () => {
+  assert.notEqual(
+    normalizeFingerprint({ source_url: "https://instagram.com/p/AbC/" }),
+    normalizeFingerprint({ source_url: "https://instagram.com/p/abc/" }),
+  );
+  assert.equal(
+    normalizeFingerprint({
+      source_url: "https://instagram.com/reel/AbC/?track=1",
+    }),
+    normalizeFingerprint({ source_url: "https://www.instagram.com/p/AbC/" }),
+  );
+  assert.equal(
+    normalizeFingerprint({ source_url: "https://tiktok.com/@first/video/123" }),
+    normalizeFingerprint({
+      source_url: "https://www.tiktok.com/@changed/video/123?track=1",
+    }),
+  );
+});
+test("national and Indonesian city coverage replaces the Pasuruan restriction", () => {
+  const regions = REGION_GROUPS.flatMap((group) => group.regions);
+  assert.equal(REGION_GROUPS.length, 38);
+  assert.equal(new Set(regions).size, 514);
+  for (const region of ["Indonesia", ...regions])
+    assert.equal(validateStory({ ...story, region }).region, region);
+  for (const region of ["", "Semua wilayah", "Kota Fiktif", "Singapore"])
+    assert.throws(() => validateStory({ ...story, region }), /kota\/kabupaten/);
+});
+test("RSS coverage accepts national items and matches the selected place only", () => {
+  assert.ok(matchesCoverage("Kebijakan ekonomi nasional terbaru", "Indonesia"));
+  assert.ok(matchesCoverage("BPBD SURABAYA membuka posko.", "Kota Surabaya"));
+  assert.ok(
+    matchesCoverage("Informasi Pasuruan terkini", "Kabupaten Pasuruan"),
+  );
+  assert.ok(
+    matchesCoverage(
+      "Jakarta  Selatan memperbaiki jalan.",
+      "Kota Administrasi Jakarta Selatan",
+    ),
+  );
+  assert.equal(matchesCoverage("Banjir Pasuruan surut", "Kota Bandung"), false);
+  assert.equal(matchesCoverage("Berita Solok terbaru", "Kota Solo"), false);
+  assert.equal(matchesCoverage("Solokan dibersihkan", "Kota Solok"), false);
+  assert.equal(matchesCoverage("Berita nasional", "Semua wilayah"), false);
+});
 const q = {
   items: [{ id: "1" }, { id: "2" }],
   index: 1,

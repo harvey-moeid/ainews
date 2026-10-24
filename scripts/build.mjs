@@ -27,6 +27,7 @@ async function walk(dir, prefix = "") {
     }
   }
 }
+await cp(path("shared/regions.NOTICE"), path("dist/client/regions.NOTICE"));
 await walk("dist/client");
 const client = `const assets=${JSON.stringify(files)};const assetHandler={fetch(req){const url=new URL(req.url);const asset=assets[url.pathname]||(!url.pathname.includes('.')?assets['/index.html']:null);if(!asset)return new Response('Not found',{status:404});const bytes=Uint8Array.from(atob(asset.data),c=>c.charCodeAt(0));return new Response(bytes,{headers:{'Content-Type':asset.mime,'Cache-Control':url.pathname.startsWith('/assets/')?'public,max-age=31536000,immutable':'private,no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin'}})}};`;
 await build({

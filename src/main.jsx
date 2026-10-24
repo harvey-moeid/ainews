@@ -65,6 +65,10 @@ import {
 } from "lucide-react";
 import Studio from "./Studio";
 import ProviderSettings from "./ProviderSettings.jsx";
+import RegionSelect from "./RegionSelect.jsx";
+import { SocialSourceFields, CaptionImporter } from "./SocialSources.jsx";
+import { isSocial, socialDefaults } from "../shared/social.js";
+import { NATIONAL_REGION } from "../shared/regions.js";
 import Overlay2Settings from "./overlay2/Settings.jsx";
 import Overlay2Player from "./overlay2/Player.jsx";
 import "./overlay2/overlay2.css";
@@ -446,7 +450,7 @@ function App() {
           text: "",
           script: "",
           category: "Pemerintahan",
-          region: "Kota Pasuruan",
+          region: region === "Semua wilayah" ? NATIONAL_REGION : region,
           priority: "reguler",
           status: "draft",
           source_name: "",
@@ -983,7 +987,7 @@ function App() {
                   {
                     "/admin": "Dari kabar lokal, menjadi siaran yang bermakna.",
                     "/admin/news":
-                      "Kelola, tinjau, dan siapkan berita terbaik untuk warga Pasuruan.",
+                      "Kelola berita Indonesia dan kota/kabupaten pilihan Anda.",
                     "/admin/sources":
                       "Kabar lokal dimulai dari sumber yang bisa ditelusuri.",
                     "/admin/broadcast":
@@ -1383,7 +1387,9 @@ function App() {
             />
           )}
           {path === "/admin/sources" && (
-            <SourcesPage {...{ sources, setModal, refresh, refreshing }} />
+            <SourcesPage
+              {...{ sources, setModal, refresh, refreshing, mode }}
+            />
           )}
           {(path === "/admin/broadcast" || isSimulator) && (
             <BroadcastPage
@@ -1434,6 +1440,7 @@ function App() {
             {
               editor: modal.item?.id ? "Sunting berita" : "Berita baru",
               source: modal.item ? "Sunting sumber" : "Tambah sumber berita",
+              caption: "Import caption profil",
               preview: "Pratinjau program",
               activity: "Aktivitas workspace",
               connection: "Status koneksi",
@@ -1477,6 +1484,27 @@ function App() {
                   notify("Sumber berita tersimpan.");
                 } catch (e) {
                   notify(e.message, "error");
+                }
+              }}
+            />
+          ) : modal.type === "caption" ? (
+            <CaptionImporter
+              source={modal.item}
+              onSave={async (post) => {
+                try {
+                  const saved = await send(
+                    "/sources/" +
+                      encodeURIComponent(modal.item.id) +
+                      "/caption",
+                    post,
+                  );
+                  await load();
+                  setModal({ type: "editor", item: saved });
+                  notify(
+                    "Caption diimpor sebagai draft. Tinjau dan pratinjau suara sebelum menyetujui.",
+                  );
+                } catch (error) {
+                  notify(error.message, "error");
                 }
               }}
             />
@@ -1959,15 +1987,12 @@ function NewsPage({
                 </button>
               )}
             </label>
-            <select
+            <RegionSelect
+              all
               aria-label="Filter wilayah"
               value={region}
               onChange={(e) => setRegion(e.target.value)}
-            >
-              <option>Semua wilayah</option>
-              <option>Kota Pasuruan</option>
-              <option>Kabupaten Pasuruan</option>
-            </select>
+            />
           </div>
         </div>
         <NewsTable news={filtered} editNews={editNews} addQueue={addQueue} />
@@ -1983,7 +2008,7 @@ function NewsPage({
     </>
   );
 }
-function SourcesPage({ sources, setModal, refresh, refreshing }) {
+function SourcesPage({ sources, setModal, refresh, refreshing, mode }) {
   return (
     <>
       <div className="source-summary">
@@ -2049,8 +2074,17 @@ function SourcesPage({ sources, setModal, refresh, refreshing }) {
                 onClick={() => refresh(s.id)}
                 disabled={!s.active || refreshing}
               >
-                Periksa sumber
+                {isSocial(s.type) ? "Ambil caption terbaru" : "Periksa sumber"}
               </Button>
+              {isSocial(s.type) && (
+                <Button
+                  icon={FileText}
+                  disabled={mode !== "connected"}
+                  onClick={() => setModal({ type: "caption", item: s })}
+                >
+                  Import caption
+                </Button>
+              )}
               <IconButton
                 icon={Settings2}
                 label="Sunting sumber"
@@ -2075,9 +2109,9 @@ function SourcesPage({ sources, setModal, refresh, refreshing }) {
         <div>
           <b>Akses yang sah, atribusi yang jelas.</b>
           <p>
-            Instagram dan TikTok menggunakan API resmi atau input manual.
-            Tambahkan sumber RSS yang mengizinkan pengambilan materi. Hasil
-            pengambilan selalu disimpan sebagai draft untuk ditinjau.
+            Caption Instagram/TikTok dapat diimpor manual tanpa API, atau
+            diambil melalui API resmi/konektor profil yang dikonfigurasi. Semua
+            hasil menjadi draft; tinjau konteks dan tanggal sebelum siaran.
           </p>
         </div>
       </div>
@@ -2444,7 +2478,7 @@ function Editor({ item, onSave, onClose, settings, voices, mode, notify }) {
         throw new Error(
           "AI memerlukan koneksi server dan API key. Anda dapat menulis naskah secara manual.",
         );
-      const d = await send("/ai", { text: x.text });
+      const d = await send("/ai", { text: x.social?.caption || x.text });
       set("script", d.script);
       notify(
         "Draft naskah dibuat oleh " + d.provider + ". Tinjau sebelum tayang.",
@@ -2561,12 +2595,30 @@ function Editor({ item, onSave, onClose, settings, voices, mode, notify }) {
         )}
         {tab === "content" ? (
           <>
+            {x.social?.caption && (
+              <section className="caption-original">
+                <label>
+                  Caption asli · {x.social.platform}
+                  <textarea readOnly rows={4} value={x.social.caption} />
+                </label>
+                <p className="hint">
+                  Caption sumber disimpan terpisah dari naskah. Periksa konteks,
+                  tanggal, dan atribusi sebelum tayang.
+                </p>
+                <Button
+                  icon={FileText}
+                  onClick={() => set("script", x.social.caption)}
+                >
+                  Gunakan caption asli
+                </Button>
+              </section>
+            )}
             <label>
               Judul berita <span className="required">*</span>
               <input
                 value={x.title}
                 onChange={(e) => set("title", e.target.value)}
-                placeholder="Apa kabar terbaru dari Pasuruan?"
+                placeholder="Apa kabar terbaru dari Indonesia atau kota Anda?"
                 maxLength="240"
               />
               <small>{x.title.length}/240 karakter</small>
@@ -2588,9 +2640,13 @@ function Editor({ item, onSave, onClose, settings, voices, mode, notify }) {
               <Button
                 icon={Sparkles}
                 onClick={summarize}
-                disabled={busy || x.text.length < 100}
+                disabled={busy || (x.social?.caption || x.text).length < 100}
               >
-                {busy ? "Memproses…" : "Rangkum dengan AI"}
+                {busy
+                  ? "Memproses…"
+                  : x.social
+                    ? "Ringkas caption dengan AI"
+                    : "Rangkum dengan AI"}
               </Button>
             </div>
             <textarea
@@ -2634,14 +2690,12 @@ function Editor({ item, onSave, onClose, settings, voices, mode, notify }) {
                 </select>
               </label>
               <label>
-                Wilayah
-                <select
+                Cakupan berita
+                <RegionSelect
+                  aria-label="Cakupan berita"
                   value={x.region}
                   onChange={(e) => set("region", e.target.value)}
-                >
-                  <option>Kota Pasuruan</option>
-                  <option>Kabupaten Pasuruan</option>
-                </select>
+                />
               </label>
             </div>
             <div className="two-cols">
@@ -2822,18 +2876,19 @@ function Editor({ item, onSave, onClose, settings, voices, mode, notify }) {
     </>
   );
 }
-function SourceEditor({ item, onSave }) {
+function SourceEditor({ item, onSave, mode }) {
   const [x, setX] = useState(
       item || {
         name: "",
         type: "RSS",
         url: "",
-        region: "Kota Pasuruan",
+        region: NATIONAL_REGION,
         active: true,
         permission: "",
       },
     ),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [credential, setCredential] = useState("");
   const set = (k, v) => setX({ ...x, [k]: v });
   return (
     <form
@@ -2841,8 +2896,11 @@ function SourceEditor({ item, onSave }) {
       onSubmit={async (e) => {
         e.preventDefault();
         setBusy(true);
-        await onSave(x);
-        setBusy(false);
+        try {
+          await onSave({ ...x, ...(credential ? { credential } : {}) });
+        } finally {
+          setBusy(false);
+        }
       }}
     >
       <label>
@@ -2852,13 +2910,24 @@ function SourceEditor({ item, onSave }) {
           maxLength="120"
           value={x.name}
           onChange={(e) => set("name", e.target.value)}
-          placeholder="Contoh: Diskominfo Kota Pasuruan"
+          placeholder="Contoh: Portal berita nasional atau Diskominfo kota"
         />
       </label>
       <div className="two-cols">
         <label>
           Jenis sumber
-          <select value={x.type} onChange={(e) => set("type", e.target.value)}>
+          <select
+            aria-label="Jenis sumber"
+            value={x.type}
+            onChange={(e) => {
+              setX({
+                ...x,
+                type: e.target.value,
+                social: { ...socialDefaults },
+              });
+              setCredential("");
+            }}
+          >
             {["RSS", "Resmi", "Instagram", "TikTok", "Manual"].map((t) => (
               <option key={t}>{t}</option>
             ))}
@@ -2866,26 +2935,50 @@ function SourceEditor({ item, onSave }) {
         </label>
         <label>
           Cakupan
-          <select
+          <RegionSelect
+            aria-label="Cakupan"
             value={x.region}
             onChange={(e) => set("region", e.target.value)}
-          >
-            <option>Kota Pasuruan</option>
-            <option>Kabupaten Pasuruan</option>
-          </select>
+          />
         </label>
       </div>
+      <p className="hint">
+        Indonesia menerima semua materi dari sumber. Pengambilan otomatis
+        kota/kabupaten mencocokkan nama daerah pada judul, isi, atau caption.
+        Import manual mengikuti cakupan sumber.
+      </p>
       <label>
-        URL / tautan feed
+        {isSocial(x.type) ? "URL profil" : "URL / tautan feed"}
         <input
           required
           type="url"
           pattern="https://.*"
           value={x.url}
           onChange={(e) => set("url", e.target.value)}
-          placeholder="https://sumber-resmi.id/feed"
+          placeholder={
+            x.type === "Instagram"
+              ? "https://www.instagram.com/nama_akun/"
+              : x.type === "TikTok"
+                ? "https://www.tiktok.com/@nama_akun"
+                : "https://sumber-resmi.id/feed"
+          }
         />
       </label>
+      {isSocial(x.type) && (
+        <SocialSourceFields
+          source={x}
+          onChange={(value) => set("social", value)}
+          credential={credential}
+          setCredential={setCredential}
+          connected={mode === "connected"}
+          hasCredential={
+            !!item?.hasCredential &&
+            item.type === x.type &&
+            (item.social?.mode || "manual") === (x.social?.mode || "manual") &&
+            (item.social?.connectorUrl || "") === (x.social?.connectorUrl || "")
+          }
+        />
+      )}
       <label>
         Catatan izin & atribusi
         <textarea
@@ -2904,7 +2997,7 @@ function SourceEditor({ item, onSave }) {
         />
         <span>Aktifkan sumber ini</span>
       </label>
-      {x.type !== "RSS" && (
+      {!isSocial(x.type) && x.type !== "RSS" && (
         <p className="hint">
           <TriangleAlert size={14} />
           Pengambilan otomatis tersedia untuk RSS. Sumber lain menggunakan input
