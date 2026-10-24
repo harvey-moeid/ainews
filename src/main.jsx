@@ -72,7 +72,7 @@ import { NATIONAL_REGION } from "../shared/regions.js";
 import Overlay2Settings from "./overlay2/Settings.jsx";
 import Overlay2Player from "./overlay2/Player.jsx";
 import "./overlay2/overlay2.css";
-import { api, send, download } from "./api";
+import { api, send, download, refreshSources } from "./api";
 import {
   demoNews,
   initialQueue,
@@ -219,6 +219,7 @@ function App() {
     [lease, setLease] = useState(false),
     [unread, setUnread] = useState(false);
   const queueRef = useRef(queue),
+    sourcesRef = useRef(sources),
     settingsRef = useRef(settings),
     utteranceRef = useRef(null),
     started = useRef(0),
@@ -233,6 +234,7 @@ function App() {
     isLive = path === "/live",
     isSimulator = path === "/simulator";
   queueRef.current = queue;
+  sourcesRef.current = sources;
   settingsRef.current = settings;
   const notify = useCallback((message, type = "success") => {
     clearTimeout(toastTimer.current);
@@ -308,9 +310,11 @@ function App() {
   }, [load]);
   useEffect(() => {
     if (mode === "connected" && !isLive) {
-      send("/refresh", { force: false })
-        .then(() => {})
-        .catch(() => {});
+      setRefreshing(true);
+      refreshSources(sourcesRef.current)
+        .then(() => load())
+        .catch(() => {})
+        .finally(() => setRefreshing(false));
     }
   }, [mode]);
   useEffect(() => {
@@ -427,13 +431,18 @@ function App() {
         );
         return;
       }
-      const r = await send("/refresh", { id, force: true });
+      const r = await refreshSources(sources, { id, force: true });
       await load();
+      const failed = r.results.filter((result) => result.error);
       notify(
-        r.results.length
-          ? "Pemeriksaan sumber selesai. Lihat status masing-masing sumber."
-          : "Tambahkan sumber terlebih dahulu.",
-        "info",
+        failed.length === 1 && r.results.length === 1
+          ? `${failed[0].name}: ${failed[0].status}`
+          : failed.length
+            ? `${r.results.length - failed.length}/${r.results.length} sumber selesai · ${failed.length} gagal. Lihat alasan pada status sumber.`
+            : r.results.length
+              ? "Pemeriksaan sumber selesai. Lihat jumlah draft dan status masing-masing sumber."
+              : "Tidak ada sumber aktif untuk diperiksa.",
+        failed.length ? "error" : "info",
       );
     } catch (e) {
       notify(e.message, "error");
@@ -2016,7 +2025,10 @@ function SourcesPage({ sources, setModal, refresh, refreshing, mode }) {
           <span className="green-dot" />
           Pengambilan sesuai permintaan
         </div>
-        <p>Sumber diperiksa saat dashboard dibuka, dengan cache 5 menit.</p>
+        <p>
+          Sumber diperiksa satu per satu saat dashboard dibuka, dengan cache 5
+          menit.
+        </p>
         <Button
           icon={RefreshCw}
           disabled={refreshing}
@@ -2964,6 +2976,12 @@ function SourceEditor({ item, onSave, mode }) {
           }
         />
       </label>
+      {x.type === "RSS" && (
+        <p className="hint">
+          Gunakan URL RSS/Atom. URL beranda dapat dipakai jika situs menyediakan
+          tautan feed; halaman artikel biasa tidak dapat diambil sebagai feed.
+        </p>
+      )}
       {isSocial(x.type) && (
         <SocialSourceFields
           source={x}

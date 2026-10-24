@@ -32,7 +32,7 @@ sebelum menyetujui berita. Daftar wilayah disertakan dalam aplikasi dan tidak
 memerlukan API eksternal. Asal data dan lisensinya ada di
 [`shared/regions.NOTICE`](shared/regions.NOTICE).
 
-1. Tambah sumber RSS dengan URL HTTPS dan catatan izin; refresh manual atau buka dashboard. Feed dicache selama lima menit dan dikunci per sumber. Instagram/TikTok memerlukan akses resmi atau input manual.
+1. Tambah sumber RSS dengan URL HTTPS dan catatan izin; refresh manual atau buka dashboard. URL beranda didukung jika HTML-nya mengiklankan tautan RSS/Atom. Redirect HTTPS publik diikuti maksimal tiga kali; halaman artikel biasa tidak diubah menjadi feed. Feed dicache selama lima menit dan dikunci per sumber. Instagram/TikTok memerlukan akses resmi atau input manual.
 2. Tambah berita, tulis bahan sumber dan atribusi, buat atau tulis naskah, pratinjau suara, tinjau, lalu setujui. Berita sensitif meminta persetujuan manusia secara eksplisit.
 3. Tambahkan berita siap tayang ke antrean. Prioritas breaking > utama > reguler; item aktif tidak dipindahkan.
 4. Pilih mode selesai: standby, ulang otomatis, N putaran total, atau ulang dengan jeda. Penayangan ulang diberi label dan tanggal asli.
@@ -188,7 +188,8 @@ Pemutar berbagi lease audio 90 detik dengan `/live`, memperpanjangnya sekitar 20
 
 - Naskah ditulis ke objek R2 baru sebelum metadata D1 menunjuk revisi tersebut. Pembaruan D1 memakai kondisi revisi. Objek tak terhubung dapat tersisa bila D1 gagal; revisi lama tetap aman.
 - Antrean mengikat key R2 revisi tertentu, dengan optimistic concurrency. Mengedit berita tidak mengubah snapshot yang sedang tayang.
-- Bootstrap mengambil paling banyak 100 metadata berita terbaru; feed paling banyak 12 item per refresh, 15 sumber aktif. Pagination penuh dan pengelompokan peristiwa semantik belum tersedia.
+- Bootstrap mengambil paling banyak 100 metadata berita terbaru; feed paling banyak 10 item per sumber per refresh. Refresh semua memproses sumber aktif secara berurutan, masing-masing dalam permintaan Worker terpisah agar query D1 tidak menumpuk dalam satu invocation. Sumber yang gagal tidak membatalkan sumber lainnya. API `POST /api/refresh` memerlukan `id` satu sumber; klien menjalankan loop untuk refresh semua. Pagination penuh dan pengelompokan peristiwa semantik belum tersedia.
+- Status sumber membedakan HTTP 401/403 (akses ditolak), 404 (URL feed tidak ditemukan), 429 (rate limit), timeout, XML tidak valid, URL bukan feed, dan kegagalan penyimpanan. Feed dibatasi 1 MB dan waktu pengambilan 15 detik termasuk redirect/discovery. Respons HTML tidak dianggap feed kosong; item dengan tautan/judul tidak valid dilewati dan dihitung. Duplikat serta materi di luar cakupan ikut dihitung. Pemblokiran publisher tidak dilewati oleh aplikasi; gunakan feed berizin atau input manual.
 - Media/GLB hingga 25 MB. Berkas disimpan lewat Worker, dengan referensi media dalam JSON berita. Pemeriksaan keamanan GLB masih sebatas format/magic dan batas ukuran; gunakan aset tepercaya.
 - API quota/penyimpanan gagal menolak penulisan tanpa silent retry. Tab yang sudah memegang snapshot dapat tetap menampilkannya. Metrik kuota akun D1/R2 tidak diklaim tanpa koneksi API metrik.
 - Backup JSON mengikutsertakan konten berita, sumber, antrean, dan pengaturan, serta disimpan di R2. Media direferensikan, bukan disalin ke JSON. Pemulihan otomatis dan verifikasi disaster recovery belum diimplementasikan.
@@ -204,6 +205,7 @@ node tests/browser.mjs
 node tests/coverage-browser.mjs
 node tests/social-browser.mjs
 node tests/workers-ai-browser.mjs
+node tests/feeds-browser.mjs
 node tests/overlay2-browser.mjs
 node tests/overlay2-character-browser.mjs
 node tests/ai-providers-browser.mjs
@@ -217,7 +219,7 @@ node tests/remote.mjs
 
 Tes browser memerlukan Chromium pada `/usr/bin/chromium`, serta API lokal dan Vite aktif. Tes membuat materi uji dalam database lokal. Jangan arahkan tes ke produksi. Migrasi produksi dikemas di `dist/.openai/drizzle/`. Build menghasilkan Worker mandiri dengan aset frontend dan font lokal tertanam, tanpa dependensi CDN runtime.
 
-Tes `coverage-browser.mjs`, `social-browser.mjs`, dan `workers-ai-browser.mjs` memakai frontend hasil build langsung dari Worker
+Tes `coverage-browser.mjs`, `social-browser.mjs`, `workers-ai-browser.mjs`, dan `feeds-browser.mjs` memakai frontend hasil build langsung dari Worker
 lokal pada port 8787; Vite tidak diperlukan untuk tes ini.
 
 ## Deployment Cloudflare Workers langsung

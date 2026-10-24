@@ -17,6 +17,7 @@ import {
 } from "./core.js";
 import { initialQueue, initialSettings, demoNews } from "../src/data.js";
 import { isRegion, matchesCoverage } from "../shared/regions.js";
+import { FeedError, loadFeed, publicFeedUrl } from "./feeds.js";
 import { isSocial } from "../shared/social.js";
 import {
   publicSource,
@@ -206,6 +207,12 @@ async function playlist(env) {
   return { ...q, items: hydrated };
 }
 async function refreshSource(env, id, force) {
+  const source = await env.DB.prepare("SELECT * FROM news_sources WHERE id=?")
+    .bind(id)
+    .first();
+  if (!source) throw new ApiError("Sumber tidak ditemukan.", 404);
+  if (!source.active)
+    throw new ApiError("Aktifkan sumber sebelum mengambil berita.");
   const now = Date.now();
   const lock = await env.DB.prepare(
     "UPDATE news_sources SET refresh_lock=? WHERE id=? AND active=1 AND refresh_lock<? AND (?=1 OR last_checked IS NULL OR last_checked<?)",
@@ -218,110 +225,49 @@ async function refreshSource(env, id, force) {
       new Date(now - 300000).toISOString(),
     )
     .run();
-  if (!lock.meta.changes) return { cached: true };
-  const source = await env.DB.prepare("SELECT * FROM news_sources WHERE id=?")
-    .bind(id)
-    .first();
-  let status = "Memerlukan akses resmi";
+  if (!lock.meta.changes)
+    return { id, name: source.name, cached: true, status: source.status };
+  let status = "Input manual · sumber ini belum mendukung pengambilan otomatis";
+  let added = 0;
   try {
     if (isSocial(source.type)) {
       const posts = await fetchSocialPosts(env, source);
       if (posts === null) {
         status = "Input caption manual · gunakan tombol Import caption";
-        return { status, added: 0 };
+        return { id, name: source.name, status, added: 0 };
       }
       const result = await importSocialPosts(env, source, posts, saveStory);
       status = result.status;
-      return result;
+      return { id, name: source.name, ...result };
     }
-    if (source.type !== "RSS") return { status };
-    const url = new URL(source.url);
-    if (
-      url.protocol !== "https:" ||
-      /localhost|(^|\.)local$|^\d|:/.test(url.hostname)
-    )
-      throw new Error("URL tidak didukung");
-    const response = await fetch(url, {
-      redirect: "error",
-      signal: AbortSignal.timeout(10000),
-      headers: {
-        Accept: "application/rss+xml, application/atom+xml, text/xml",
-      },
-    });
-    if (!response.ok) throw new Error("Sumber tidak merespons");
-    const reader = response.body.getReader();
-    let size = 0,
-      parts = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > 1000000) {
-        await reader.cancel();
-        throw new Error("Feed terlalu besar");
+    if (source.type !== "RSS")
+      return { id, name: source.name, status, added: 0 };
+    const feed = await loadFeed(source.url);
+    let duplicates = 0,
+      outsideCoverage = 0,
+      invalid = 0;
+    for (const item of feed.entries) {
+      if (!item.url || item.title.length < 5 || item.title.length > 240) {
+        invalid++;
+        continue;
       }
-      parts.push(value);
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const p of parts) {
-      bytes.set(p, offset);
-      offset += p.length;
-    }
-    const xml = new TextDecoder().decode(bytes);
-    const entries = [
-      ...xml.matchAll(/<(?:item|entry)\b[^>]*>([\s\S]*?)<\/(?:item|entry)>/gi),
-    ].slice(0, 12);
-    let added = 0;
-    const clean = (t) =>
-      t
-        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-        .replace(/<[^>]*>/g, " ")
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/\s+/g, " ")
-        .trim();
-    const tag = (s, t) =>
-      clean(
-        s.match(
-          new RegExp("<" + t + "[^>]*>([\\s\\S]*?)<\\/" + t + ">", "i"),
-        )?.[1] || "",
-      );
-    for (const [, entry] of entries) {
-      const title = tag(entry, "title");
-      const rawDate =
-        tag(entry, "pubDate") ||
-        tag(entry, "published") ||
-        tag(entry, "updated");
-      const sourceDate = new Date(rawDate);
-      const knownDate = !Number.isNaN(sourceDate.valueOf());
-      const text =
-        tag(entry, "description") ||
-        tag(entry, "summary") ||
-        tag(entry, "content");
-      if (!matchesCoverage(title + " " + text, source.region)) continue;
-      const link =
-        tag(entry, "link") ||
-        entry.match(/<link[^>]*href=["']([^"']+)/i)?.[1] ||
-        source.url;
-      const exists = await env.DB.prepare(
-        "SELECT id FROM news_stories WHERE fingerprint=? LIMIT 1",
-      )
-        .bind(normalizeFingerprint({ title, source_url: link }))
-        .first();
-      if (exists) continue;
+      if (!matchesCoverage(item.title + " " + item.text, source.region)) {
+        outsideCoverage++;
+        continue;
+      }
+      const sourceDate = new Date(item.publishedAt);
+      const knownDate = Number.isFinite(sourceDate.valueOf());
       try {
         await saveStory(
           env,
           {
-            title,
-            text: text || title,
+            title: item.title,
+            text: (item.text || item.title).slice(0, 30000),
             script: "",
             source_name:
               source.name +
               (knownDate ? "" : " · tanggal sumber belum tersedia"),
-            source_url: link,
+            source_url: item.url,
             category: "Peristiwa",
             region: source.region,
             priority: "reguler",
@@ -333,19 +279,54 @@ async function refreshSource(env, id, force) {
           "source",
         );
         added++;
-      } catch (e) {
-        if (e.status !== 409) throw e;
+      } catch (error) {
+        if (error.status === 409) duplicates++;
+        else if (error instanceof ApiError && error.status === 400) invalid++;
+        else throw error;
       }
     }
-    status = `Terhubung · ${added} draft baru`;
-    return { status, added };
+    status =
+      `Terhubung · ${added} draft baru` +
+      (duplicates ? ` · ${duplicates} duplikat` : "") +
+      (outsideCoverage ? ` · ${outsideCoverage} di luar cakupan` : "") +
+      (invalid ? ` · ${invalid} item tidak valid` : "") +
+      (!feed.entries.length ? " · feed kosong" : "");
+    return {
+      id,
+      name: source.name,
+      status,
+      added,
+      duplicates,
+      outsideCoverage,
+      invalid,
+      feedUrl: feed.url,
+      discovered: feed.discovered,
+    };
   } catch (error) {
-    status = isSocial(source.type)
-      ? error instanceof ApiError
+    status =
+      error instanceof ApiError
         ? error.message
-        : "Gagal mengambil caption. Periksa koneksi dan izin sumber."
-      : "Gagal mengambil feed";
-    return { status, error: true };
+        : "Penyimpanan hasil pengambilan gagal. Coba lagi setelah layanan pulih.";
+    console.warn(
+      JSON.stringify({
+        event: "source.refresh.failure",
+        sourceId: id,
+        code:
+          error instanceof FeedError
+            ? error.code
+            : error instanceof ApiError
+              ? "source_config"
+              : "storage",
+      }),
+    );
+    return {
+      id,
+      name: source.name,
+      status,
+      error: true,
+      added,
+      code: error instanceof FeedError ? error.code : "source_error",
+    };
   } finally {
     await env.DB.prepare(
       "UPDATE news_sources SET status=?,last_checked=?,refresh_lock=0 WHERE id=?",
@@ -354,6 +335,7 @@ async function refreshSource(env, id, force) {
       .run();
   }
 }
+
 export default {
   async fetch(request, env) {
     if (env.AUTH_MODE === "cloudflare-access") {
@@ -596,6 +578,7 @@ export default {
           throw new ApiError(
             "Pilih Indonesia atau kota/kabupaten yang tersedia.",
           );
+        if (x.type === "RSS") publicFeedUrl(x.url);
         const id = x.id || uuid();
         if (isSocial(x.type) && !/^[a-zA-Z0-9_-]{1,80}$/.test(id))
           throw new ApiError("ID sumber sosial tidak valid.");
@@ -677,15 +660,11 @@ export default {
       }
       if (url.pathname === "/api/refresh" && request.method === "POST") {
         const x = await body(request);
-        const sources = await env.DB.prepare(
-          "SELECT id FROM news_sources WHERE active=1 LIMIT 15",
-        ).all();
-        const result = await Promise.all(
-          sources.results
-            .filter((s) => !x.id || s.id === x.id)
-            .map((s) => refreshSource(env, s.id, !!x.force)),
-        );
-        return json({ results: result });
+        if (typeof x.id !== "string" || !x.id || x.id.length > 200)
+          throw new ApiError(
+            "Pilih satu sumber per permintaan. Refresh semua dijalankan per sumber oleh aplikasi.",
+          );
+        return json({ results: [await refreshSource(env, x.id, !!x.force)] });
       }
       if (url.pathname === "/api/history" && request.method === "POST") {
         const x = await body(request);
