@@ -5,6 +5,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  "ai": { "binding": "AI" },
   "vars": {
     "AUTH_MODE": "cloudflare-access",
     "ACCESS_TEAM_DOMAIN": "harveymoeid.cloudflareaccess.com",

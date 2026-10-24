@@ -76,7 +76,7 @@ const card = (provider) =>
 try {
   await page.goto("http://127.0.0.1:5173/admin/ai");
   await page.getByText("Sistem terhubung", { exact: true }).waitFor();
-  assert.equal(await page.locator(".provider-card").count(), 9);
+  assert.equal(await page.locator(".provider-card").count(), 10);
   for (const provider of providers) {
     const select = page.getByLabel(`Model ${provider.name}`, { exact: true });
     const options = await select
@@ -184,7 +184,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Provider browser passed: nine cards, four model menus, key controls, fetched/saved model selection, fallback order, enable state, save/reload, response tests and mobile layout.",
+    "Provider browser passed: ten cards, four model menus, key controls, fetched/saved model selection, fallback order, enable state, save/reload, response tests and mobile layout.",
   );
 } finally {
   await browser.close();

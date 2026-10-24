@@ -5,6 +5,7 @@ import {
   encryptCredential,
 } from "./credentials.js";
 import { generateText, listModels } from "./ai.js";
+import { workersAiAvailable } from "./workers-ai.js";
 import { indexStory } from "./rag.js";
 import { handleOverlay2, validateOverlay2 } from "./overlay2.js";
 import { accessRequest } from "./access.js";
@@ -782,7 +783,12 @@ export default {
         const health = await credentialHealth(env);
         return json(
           Object.fromEntries(
-            AI_PROVIDERS.map((p) => [p.id, health[p.secret] !== "missing"]),
+            AI_PROVIDERS.map((p) => [
+              p.id,
+              p.binding
+                ? workersAiAvailable(env)
+                : health[p.secret] !== "missing",
+            ]),
           ),
         );
       }
@@ -790,6 +796,7 @@ export default {
         return json({
           providers: AI_PROVIDERS,
           credentials: await credentialHealth(env),
+          bindings: { AI: workersAiAvailable(env) ? "available" : "missing" },
           keyStorageReady: Boolean(env.AI_KEY_ENCRYPTION_SECRET?.length >= 32),
         });
       }

@@ -71,7 +71,7 @@ r = await req("/overlay2/index", {});
 assert.equal(r.status, 200, "FTS index runs on local D1");
 assert.ok(r.data.indexed >= 1);
 r = await req("/ai/catalog", null, "GET");
-assert.equal(r.data.providers.length, 9);
+assert.equal(r.data.providers.length, 10);
 r = await req("/overlay2/session", {
   controller: "browser-test-a",
   action: "start",

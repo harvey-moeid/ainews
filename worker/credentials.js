@@ -1,7 +1,10 @@
 import { ApiError } from "./core.js";
 import { AI_PROVIDERS } from "../shared/ai-catalog.js";
 
-const allowed = new Set([...AI_PROVIDERS.map((p) => p.secret), "TLK_API_KEY"]);
+const allowed = new Set([
+  ...AI_PROVIDERS.map((p) => p.secret).filter(Boolean),
+  "TLK_API_KEY",
+]);
 const allowedName = (name) =>
   allowed.has(name) || /^SOCIAL_SOURCE:[a-zA-Z0-9_-]{1,80}$/.test(name);
 async function encryptionKey(env) {

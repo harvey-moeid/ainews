@@ -97,7 +97,11 @@ export default function ProviderSettings({
       <div className="provider-list">
         {providers.map((provider, index) => {
           const definition = AI_PROVIDERS.find((p) => p.id === provider.id);
-          const status = catalog?.credentials?.[definition.secret] || "missing";
+          const status = definition.binding
+            ? catalog?.bindings?.[definition.binding] === "available"
+              ? "binding"
+              : "missing"
+            : catalog?.credentials?.[definition.secret] || "missing";
           const choices =
             models[provider.id] ||
             definition.models.map((id) => ({ id, name: id }));
@@ -120,11 +124,15 @@ export default function ProviderSettings({
                   </span>
                 </h2>
                 <p>
-                  {status === "environment"
-                    ? "Key dari runtime"
-                    : status === "encrypted"
-                      ? "Key tersimpan terenkripsi"
-                      : "Key belum diisi"}
+                  {definition.binding
+                    ? status === "binding"
+                      ? "Binding AI tersedia · tanpa API key"
+                      : "Binding AI belum tersedia"
+                    : status === "environment"
+                      ? "Key dari runtime"
+                      : status === "encrypted"
+                        ? "Key tersimpan terenkripsi"
+                        : "Key belum diisi"}
                 </p>
                 <label>
                   Model {provider.name}
@@ -163,26 +171,28 @@ export default function ProviderSettings({
                     ? "Daftar dimuat dari API provider; akses model mengikuti akun Anda."
                     : "Daftar bawaan. Muat dari provider untuk pilihan terbaru."}
                 </p>
-                <label>
-                  API key {provider.name}
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    value={keys[provider.id] || ""}
-                    disabled={status === "environment"}
-                    onChange={(e) =>
-                      setKeys((old) => ({
-                        ...old,
-                        [provider.id]: e.target.value,
-                      }))
-                    }
-                    placeholder={
-                      status === "environment"
-                        ? "Dikelola melalui runtime"
-                        : "Kosongkan untuk mempertahankan key tersimpan"
-                    }
-                  />
-                </label>
+                {!definition.binding && (
+                  <label>
+                    API key {provider.name}
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={keys[provider.id] || ""}
+                      disabled={status === "environment"}
+                      onChange={(e) =>
+                        setKeys((old) => ({
+                          ...old,
+                          [provider.id]: e.target.value,
+                        }))
+                      }
+                      placeholder={
+                        status === "environment"
+                          ? "Dikelola melalui runtime"
+                          : "Kosongkan untuk mempertahankan key tersimpan"
+                      }
+                    />
+                  </label>
+                )}
                 {definition.keyHelp && (
                   <p className="o2-help">
                     {definition.keyHelp}{" "}
@@ -195,18 +205,20 @@ export default function ProviderSettings({
                     </a>
                   </p>
                 )}
-                <button
-                  className="btn"
-                  disabled={
-                    !!busy ||
-                    !keys[provider.id] ||
-                    !catalog?.keyStorageReady ||
-                    status === "environment"
-                  }
-                  onClick={() => run(provider.id, "key")}
-                >
-                  Simpan key {provider.name}
-                </button>
+                {!definition.binding && (
+                  <button
+                    className="btn"
+                    disabled={
+                      !!busy ||
+                      !keys[provider.id] ||
+                      !catalog?.keyStorageReady ||
+                      status === "environment"
+                    }
+                    onClick={() => run(provider.id, "key")}
+                  >
+                    Simpan key {provider.name}
+                  </button>
+                )}
               </div>
               <div className="provider-actions">
                 <button

@@ -1,6 +1,7 @@
 import { ApiError } from "./core.js";
 import { AI_PROVIDERS, mergeProviders } from "../shared/ai-catalog.js";
 import { getCredential } from "./credentials.js";
+import { runWorkersAi, listWorkersAiModels } from "./workers-ai.js";
 
 export async function readBounded(response, max = 1024 * 1024) {
   const reader = response.body?.getReader();
@@ -66,8 +67,10 @@ export async function generateText(
   )) {
     try {
       const definition = AI_PROVIDERS.find((v) => v.id === p.id);
-      const key = await getCredential(env, definition.secret);
-      if (!key) {
+      const key = definition.binding
+        ? null
+        : await getCredential(env, definition.secret);
+      if (!definition.binding && !key) {
         failures.push(p.name + ": key belum diisi");
         continue;
       }
@@ -77,7 +80,13 @@ export async function generateText(
         signal: AbortSignal.timeout(18000),
       };
       let data, text;
-      if (p.id === "gemini") {
+      if (p.id === "workersai") {
+        data = await runWorkersAi(env, p.model, system, user, maxTokens);
+        text =
+          typeof data?.response === "string"
+            ? data.response
+            : textContent(data?.choices?.[0]?.message?.content);
+      } else if (p.id === "gemini") {
         data = await jsonResponse(
           await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(p.model)}:generateContent`,
@@ -222,6 +231,7 @@ function isChatModel(provider, model) {
 export async function listModels(env, id) {
   const provider = AI_PROVIDERS.find((p) => p.id === id);
   if (!provider) throw new ApiError("Provider tidak dikenal.");
+  if (id === "workersai") return listWorkersAiModels(env);
   const key = await getCredential(env, provider.secret);
   if (!key && !["openrouter", "huggingface"].includes(id))
     throw new ApiError("Isi API key provider sebelum memuat model.");

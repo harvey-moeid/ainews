@@ -100,6 +100,21 @@ export const AI_PROVIDERS = [
     keyHelp: "Gunakan API key dari Mistral Studio/La Plateforme.",
     docsUrl: "https://docs.mistral.ai/models",
   },
+  {
+    id: "workersai",
+    name: "Cloudflare Workers AI",
+    binding: "AI",
+    models: [
+      "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "@cf/meta/llama-3.1-8b-instruct-fast",
+      "@cf/meta/llama-4-scout-17b-16e-instruct",
+    ],
+    enabled: false,
+    keyHelp:
+      "Menggunakan binding AI pada Worker tanpa API key terpisah. Pemakaian mengikuti kuota akun Cloudflare.",
+    docsUrl:
+      "https://developers.cloudflare.com/workers-ai/configuration/bindings/",
+  },
 ];
 export function mergeProviders(saved = []) {
   const result = [],

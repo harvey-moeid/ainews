@@ -68,7 +68,7 @@ await page.screenshot({
   fullPage: true,
 });
 await page.getByRole("button", { name: "Konfigurasi AI", exact: true }).click();
-assert.equal(await page.locator(".provider-card").count(), 9);
+assert.equal(await page.locator(".provider-card").count(), 10);
 await page.getByRole("button", { name: "Sumber berita", exact: true }).click();
 await page.getByRole("button", { name: "Tambah sumber", exact: true }).click();
 await page.getByLabel("Nama sumber").fill("Feed pengujian");

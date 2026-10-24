@@ -56,6 +56,7 @@ await writeFile(
       main: "index.js",
       compatibility_date: "2026-10-15",
       compatibility_flags: ["nodejs_compat"],
+      ai: { binding: "AI" },
       d1_databases: [
         {
           binding: "DB",

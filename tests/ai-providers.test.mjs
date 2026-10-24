@@ -40,12 +40,15 @@ const chatUrls = {
 };
 
 test("four new providers have distinct credentials and model choices; legacy order is retained", () => {
-  assert.equal(AI_PROVIDERS.length, 9);
+  assert.equal(AI_PROVIDERS.length, 10);
   assert.deepEqual(
     providers.map((p) => p.id),
     ids,
   );
-  assert.equal(new Set(AI_PROVIDERS.map((p) => p.secret)).size, 9);
+  assert.equal(
+    new Set(AI_PROVIDERS.filter((p) => p.secret).map((p) => p.secret)).size,
+    9,
+  );
   for (const provider of providers) {
     assert.ok(provider.models.length >= 3);
     assert.equal(provider.enabled, false);
