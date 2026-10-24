@@ -8,7 +8,12 @@ import {
   ingestEvents,
   validateOverlay2,
 } from "../worker/overlay2.js";
-import { encryptCredential, decryptCredential } from "../worker/credentials.js";
+import {
+  encryptCredential,
+  decryptCredential,
+  getCredential,
+} from "../worker/credentials.js";
+import { AI_PROVIDERS } from "../shared/ai-catalog.js";
 import { answerWithNews, retrieveNews } from "../worker/rag.js";
 import { generateText, listModels } from "../worker/ai.js";
 import { initialSettings } from "../src/data.js";
@@ -266,6 +271,55 @@ test("stored credentials are authenticated ciphertext; catalog never returns pla
         .prepare("SELECT ciphertext FROM app_credentials")
         .get()
         .ciphertext.includes(secret),
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("new provider keys save encrypted through the API and model settings persist", async () => {
+  const { sqlite, env } = database();
+  try {
+    const ids = ["nvidia", "cohere", "huggingface", "mistral"];
+    for (const provider of AI_PROVIDERS.filter((p) => ids.includes(p.id))) {
+      const value = "test-provider-key-" + provider.id;
+      assert.equal(
+        (
+          await request(
+            env,
+            "/ai/keys",
+            { name: provider.secret, value },
+            "PUT",
+          )
+        ).status,
+        200,
+      );
+      assert.equal(await getCredential(env, provider.secret), value);
+      const catalog = await request(env, "/ai/catalog", null, "GET");
+      assert.equal(catalog.data.credentials[provider.secret], "encrypted");
+      assert.ok(!JSON.stringify(catalog).includes(value));
+      assert.ok(
+        !sqlite
+          .prepare("SELECT ciphertext FROM app_credentials WHERE id=?")
+          .get(provider.secret)
+          .ciphertext.includes(value),
+      );
+    }
+    const aiProviders = [...settings.aiProviders].reverse().map((p) => ({
+      ...p,
+      enabled: ids.includes(p.id),
+      model: AI_PROVIDERS.find((d) => d.id === p.id).models.at(-1),
+    }));
+    assert.equal(
+      (await request(env, "/settings", { ...settings, aiProviders }, "PUT"))
+        .status,
+      200,
+    );
+    const persisted = (await request(env, "/bootstrap", null, "GET")).data
+      .settings.aiProviders;
+    assert.deepEqual(
+      persisted.map(({ id, enabled, model }) => ({ id, enabled, model })),
+      aiProviders.map(({ id, enabled, model }) => ({ id, enabled, model })),
     );
   } finally {
     sqlite.close();

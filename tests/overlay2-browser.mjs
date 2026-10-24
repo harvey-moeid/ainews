@@ -80,7 +80,7 @@ try {
   await page
     .getByRole("button", { name: "Provider & model AI", exact: true })
     .click();
-  assert.equal(await page.locator(".provider-card select").count(), 5);
+  assert.equal(await page.locator(".provider-card select").count(), 9);
   await page.getByLabel("Model OpenAI").selectOption("gpt-4.1");
   await Promise.all([
     page.waitForResponse(
@@ -296,7 +296,7 @@ try {
   assert.equal(lease, null);
   assert.deepEqual(errors, []);
   console.log(
-    "Overlay 2 browser passed: editable title and transcript layout persistence, preview and position presets, native fullscreen in standby, mobile fullscreen fallback and exit, five model dropdowns, responsive canvas, sentence-boundary reply, news resume, one audio job, session stop.",
+    "Overlay 2 browser passed: editable title and transcript layout persistence, preview and position presets, native fullscreen in standby, mobile fullscreen fallback and exit, nine model dropdowns, responsive canvas, sentence-boundary reply, news resume, one audio job, session stop.",
   );
 } finally {
   await browser.close();

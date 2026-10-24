@@ -40,6 +40,66 @@ export const AI_PROVIDERS = [
     models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
     enabled: false,
   },
+  {
+    id: "nvidia",
+    name: "NVIDIA NIM",
+    secret: "NVIDIA_API_KEY",
+    models: [
+      "meta/llama-3.3-70b-instruct",
+      "meta/llama-3.1-8b-instruct",
+      "meta/llama-3.1-70b-instruct",
+      "microsoft/phi-4-mini-instruct",
+    ],
+    enabled: false,
+    keyHelp: "Gunakan API key NVIDIA API Catalog dari build.nvidia.com.",
+    docsUrl: "https://docs.api.nvidia.com/nim/reference/llm-apis",
+  },
+  {
+    id: "cohere",
+    name: "Cohere",
+    secret: "COHERE_API_KEY",
+    models: [
+      "command-a-03-2025",
+      "command-a-plus-05-2026",
+      "command-r7b-12-2024",
+      "command-r-08-2024",
+      "command-r-plus-08-2024",
+    ],
+    enabled: false,
+    keyHelp: "Gunakan API key dari dashboard Cohere.",
+    docsUrl: "https://docs.cohere.com/docs/models",
+  },
+  {
+    id: "huggingface",
+    name: "Hugging Face",
+    secret: "HUGGINGFACE_API_KEY",
+    models: [
+      "Qwen/Qwen3-4B-Instruct-2507",
+      "meta-llama/Llama-3.3-70B-Instruct",
+      "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "openai/gpt-oss-120b",
+    ],
+    enabled: false,
+    keyHelp:
+      "Gunakan token Hugging Face dengan izin Inference Providers. Model gated memerlukan akses akun.",
+    docsUrl:
+      "https://huggingface.co/docs/inference-providers/en/tasks/chat-completion",
+  },
+  {
+    id: "mistral",
+    name: "Mistral",
+    secret: "MISTRAL_API_KEY",
+    models: [
+      "mistral-small-latest",
+      "mistral-medium-latest",
+      "mistral-large-latest",
+      "ministral-8b-2512",
+      "mistral-large-4",
+    ],
+    enabled: false,
+    keyHelp: "Gunakan API key dari Mistral Studio/La Plateforme.",
+    docsUrl: "https://docs.mistral.ai/models",
+  },
 ];
 export function mergeProviders(saved = []) {
   const result = [],
