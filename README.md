@@ -167,6 +167,63 @@ kebenaran klaim dalam postingan.
 
 Modul tersendiri di repo ini: `/admin/overlay2` untuk pengaturan, `/overlay2` untuk pemutar wajah wireframe biru dengan mata oranye. Tidak bergantung pada modul tarot.
 
+### Hubungkan koneklive melalui webhook
+
+Setelah kode ini di-merge dan di-deploy, endpoint produksi adalah:
+
+```text
+POST https://ainews.harveymoeid.workers.dev/api/hooks/tiktok
+```
+
+1. Buka **Ainews → Overlay 2 → Mode konektor**, pilih **Webhook koneklive**.
+   Opsional: isi **Filter username LIVE** untuk membatasi akun penyiar, lalu **Simpan Overlay 2**.
+2. Di dashboard `koneklive`, buat integrasi **Webhook** yang aktif dengan URL di atas
+   (atau salin URL yang ditampilkan Ainews jika memakai domain lain), event **comment** dan **gift**,
+   timeout 5000 ms, retry cap 3. `koneklive` sudah mendukung format ini; kodenya tidak perlu diubah.
+3. Salin `hmacSecret` yang ditampilkan sekali oleh koneklive ke **Secret HMAC koneklive**
+   di Ainews dan klik **Simpan secret webhook**. Ini bukan REST API key.
+   Penyimpanan UI memerlukan `AI_KEY_ENCRYPTION_SECRET` yang sudah dipasang di Worker.
+   Alternatif: pasang secret runtime `KONEKLIVE_WEBHOOK_SECRET` dengan nilai `hmacSecret`
+   melalui Cloudflare Dashboard. Secret runtime diprioritaskan; jika sudah dipasang,
+   rotasi juga harus dilakukan di runtime. Jangan memasukkan secret ke URL atau source code.
+4. Jika domain dilindungi Cloudflare Access pada edge, buat aplikasi Access khusus
+   hostname tersebut dengan path **`/api/hooks/tiktok`** dan policy **Bypass → Include Everyone**.
+   Gunakan path khusus ini saja; aplikasi utama tetap memakai policy login admin.
+   Handler Worker tetap memverifikasi HMAC untuk semua kiriman ke path ini.
+5. Klik **Test** pada integrasi koneklive. Delivery log harus menunjukkan HTTP 200.
+   Response `is_test:true, accepted:0` sengaja tidak menambah komentar atau hak gift.
+   Test hanya membuktikan pengiriman webhook, bukan koneksi TikTok LIVE.
+6. Hubungkan akun LIVE melalui koneklive, buka `/overlay2` dan klik **Aktifkan suara & mulai**.
+   Komentar baru masuk antrean dan gift memberi hak jawaban AI umum sesuai aturan Overlay 2.
+   Kiriman saat sesi berhenti dijawab 200 dengan `ignored:"session_inactive"` dan tidak disimpan
+   untuk sesi berikutnya. Webhook tidak memerlukan URL konektor atau `TLK_API_KEY`.
+
+Verifikasi menggunakan HMAC-SHA256 atas byte UTF-8 asli `timestamp + '.' + rawBody`,
+header `X-Webhook-Timestamp` (Unix detik, toleransi ±300 detik),
+`X-Webhook-Signature: sha256=<hex>`, dan `X-Event-ID` yang harus cocok dengan `id` payload.
+Payload maksimal 32 KiB. Standard JSON koneklive dipetakan dari `type:"comment"` /
+`data.comment` dan `type:"gift"`, `user`, `source.account`, `source.room_id`.
+Gift diterima jika `delta_count>0` atau `is_final:true`; hak gift bersifat boolean, bukan hitungan koin.
+Event ID dideduplikasi dalam sesi dan room yang diberi namespace akun penyiar.
+Timestamp event tetap harus baru (maksimal dua menit dan sesudah sesi dimulai).
+Antrean, cooldown, filter spam, dan retensi enam jam yang sudah ada tetap berlaku.
+Penyimpanan gagal menghasilkan 503 agar koneklive dapat mencoba ulang. Filter, antrean penuh,
+TTL/retry koneklive, sesi berhenti, dan koneksi terputus tetap bisa menyebabkan event terlewat.
+Status **Webhook diterima** berarti event terverifikasi diterima; bukan pemeriksaan status LIVE upstream.
+Tidak ada migrasi database baru. Mode REST tetap menjadi default untuk konfigurasi lama.
+
+Troubleshooting:
+
+| Hasil delivery | Periksa |
+| --- | --- |
+| 301/302/403 atau halaman login | URL HTTPS yang tepat dan Bypass Access untuk path webhook saja; koneklive tidak mengikuti redirect |
+| 401 | Nilai `hmacSecret`, header HMAC, atau jam server koneklive; login admin tidak menggantikan HMAC |
+| 409 | Simpan pilihan **Webhook koneklive** di Overlay 2 |
+| 503 | Secret belum diisi, master enkripsi berubah, atau D1 tidak tersedia/kuota habis |
+| 200 tetapi komentar tidak masuk | Sesi aktif, `is_test:false`, filter akun, timestamp, spam/cooldown, antrean, dan event **comment** sudah dipilih |
+
+### Konektor REST lama
+
 1. Terapkan migrasi `0001_overlay2.sql`, lalu konfigurasikan provider dan model di **Konfigurasi AI**. Isi key konektor pada **Overlay 2**, atau pasang secret `TLK_API_KEY` yang nilainya sama dengan `API_KEY` server konektor. URL default mengikuti `https://tiktok-live-konektor.onrender.com` dan dapat diubah ke origin HTTPS lain.
 2. Mulai LIVE melalui dashboard konektor yang sudah ada. Klik **Uji koneksi tersimpan** untuk memeriksa status. Ainews menggunakan endpoint read-only `/api/v1/status` dan `/api/v1/events?type=chat,gift&limit=100`, dengan Bearer key server-side. Tidak mengubah pengaturan atau memulai LIVE konektor secara otomatis.
 3. Siapkan berita disetujui dalam antrean redaksi. Klik **Sinkronkan indeks RAG** untuk berita lama; berita baru otomatis diindeks dan pencarian juga mengisi indeks yang belum lengkap secara bertahap. RAG memakai pencarian kata FTS5/BM25 di D1, dengan potongan materi R2, sumber, tanggal, dan revisi. Ini bukan pencarian embedding/semantik. Draft dan data demo tidak menjadi sumber jawaban. Antrean tetap memakai snapshot berita, sementara RAG hanya mengambil revisi yang saat ini disetujui.

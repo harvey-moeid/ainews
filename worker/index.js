@@ -9,6 +9,7 @@ import { workersAiAvailable } from "./workers-ai.js";
 import { indexStory } from "./rag.js";
 import { handleOverlay2, validateOverlay2 } from "./overlay2.js";
 import { accessRequest } from "./access.js";
+import { handleTikTokWebhook, TIKTOK_WEBHOOK_PATH } from "./tiktok-webhook.js";
 import {
   ApiError,
   validateStory,
@@ -338,7 +339,12 @@ async function refreshSource(env, id, force) {
 
 export default {
   async fetch(request, env) {
-    if (env.AUTH_MODE === "cloudflare-access") {
+    const url = new URL(request.url);
+    // This exact machine endpoint authenticates with HMAC instead of browser login.
+    if (
+      url.pathname !== TIKTOK_WEBHOOK_PATH &&
+      env.AUTH_MODE === "cloudflare-access"
+    ) {
       try {
         request = await accessRequest(request, env);
       } catch {
@@ -348,8 +354,11 @@ export default {
         });
       }
     }
-    const url = new URL(request.url);
     try {
+      if (url.pathname === TIKTOK_WEBHOOK_PATH)
+        return await handleTikTokWebhook(request, env, () =>
+          readValue(env, "app_settings", "main", initialSettings),
+        );
       if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
       if (!env.DB || !env.BUCKET)
         throw new ApiError(

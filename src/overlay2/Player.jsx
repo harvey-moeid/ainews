@@ -334,7 +334,7 @@ export default function Overlay2Player() {
               throw Error(
                 "Sesi pemutar berubah atau dihentikan dari ruang kendali.",
               );
-            if (next.config.comments)
+            if (next.config.comments && next.config.connectorMode !== "webhook")
               await send("/overlay2/poll", { controller: controller.current });
           } catch (e) {
             if (!job.signal.aborted) await stop(e.message);

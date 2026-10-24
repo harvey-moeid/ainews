@@ -8,6 +8,14 @@ import { answerWithNews, syncIndex } from "./rag.js";
 
 export function validateOverlay2(value = {}) {
   const x = { ...OVERLAY2_DEFAULTS, ...value };
+  if (!["rest", "webhook"].includes(x.connectorMode))
+    throw new ApiError("Mode konektor tidak valid.");
+  if (
+    typeof x.connectorAccount !== "string" ||
+    (x.connectorAccount && !/^@?[a-zA-Z0-9_.]{1,100}$/.test(x.connectorAccount))
+  )
+    throw new ApiError("Username akun konektor tidak valid.");
+  x.connectorAccount = x.connectorAccount.replace(/^@/, "").toLowerCase();
   for (const [key, max] of [
     ["name", 40],
     ["title", 100],
@@ -93,7 +101,7 @@ export function normalizeEvent(event, start, now = Date.now()) {
     .trim()
     .toLowerCase()
     .slice(0, 100);
-  const room = String(event.roomId || "").slice(0, 100);
+  const room = String(event.roomId || "").slice(0, 300);
   if (!username || !room) return null;
   const question = String(data.message || "")
     .replace(/[\u0000-\u001f\u007f]/g, " ")
@@ -188,8 +196,8 @@ export async function ingestEvents(env, runtime, events, settings) {
   if (gifts.length)
     statements.push(
       env.DB.prepare(
-        "INSERT INTO overlay2_gifts(session_id,room,username,created_at) SELECT ?,json_extract(value,'$.room'),json_extract(value,'$.username'),json_extract(value,'$.createdAt') FROM json_each(?) WHERE 1 ON CONFLICT(session_id,room,username) DO UPDATE SET created_at=MAX(created_at,excluded.created_at)",
-      ).bind(runtime.session_id, JSON.stringify(gifts)),
+        "INSERT INTO overlay2_gifts(session_id,room,username,created_at) SELECT ?,json_extract(value,'$.room'),json_extract(value,'$.username'),json_extract(value,'$.createdAt') FROM json_each(?) WHERE EXISTS(SELECT 1 FROM overlay2_runtime WHERE id='main' AND active=1 AND session_id=?) ON CONFLICT(session_id,room,username) DO UPDATE SET created_at=MAX(created_at,excluded.created_at)",
+      ).bind(runtime.session_id, JSON.stringify(gifts), runtime.session_id),
     );
   // Keep the whole poll below D1's free-plan query limit, even in a busy room.
   for (const event of fresh
@@ -221,8 +229,8 @@ export async function ingestEvents(env, runtime, events, settings) {
   if (fresh.length)
     statements.push(
       env.DB.prepare(
-        "INSERT OR IGNORE INTO overlay2_events(id,session_id,room,username,kind,created_at) SELECT json_extract(value,'$.id'),?,json_extract(value,'$.room'),json_extract(value,'$.username'),json_extract(value,'$.kind'),json_extract(value,'$.createdAt') FROM json_each(?)",
-      ).bind(runtime.session_id, JSON.stringify(fresh)),
+        "INSERT OR IGNORE INTO overlay2_events(id,session_id,room,username,kind,created_at) SELECT json_extract(value,'$.id'),?,json_extract(value,'$.room'),json_extract(value,'$.username'),json_extract(value,'$.kind'),json_extract(value,'$.createdAt') FROM json_each(?) WHERE EXISTS(SELECT 1 FROM overlay2_runtime WHERE id='main' AND active=1 AND session_id=?)",
+      ).bind(runtime.session_id, JSON.stringify(fresh), runtime.session_id),
     );
   if (statements.length) await env.DB.batch(statements);
   await env.DB.batch([
@@ -276,6 +284,21 @@ export async function handleOverlay2(
   if (route === "/index" && request.method === "POST")
     return respond(await syncIndex(env));
   if (route === "/check" && request.method === "POST") {
+    if (config.connectorMode === "webhook") {
+      const ready = Boolean(
+        await getCredential(env, "KONEKLIVE_WEBHOOK_SECRET"),
+      );
+      const runtime = await getRuntime(env);
+      const received = JSON.parse(runtime.connector_status);
+      return respond({
+        ...received,
+        status: ready
+          ? received.status || "Menunggu webhook koneklive"
+          : "Secret webhook belum diisi",
+        ready,
+        webhookUrl: url.origin + "/api/hooks/tiktok",
+      });
+    }
     const status = await connectorRequest(env, config, "/api/v1/status");
     return respond({
       status: String(status.status || "Unknown"),
@@ -306,6 +329,12 @@ export async function handleOverlay2(
   if (!runtime.active)
     throw new ApiError("Sesi Overlay 2 sedang berhenti.", 409);
   if (route === "/poll") {
+    // Webhook mode receives pushes; never call the legacy REST API.
+    if (config.connectorMode === "webhook")
+      return respond({
+        webhook: true,
+        ...JSON.parse(runtime.connector_status),
+      });
     const lock = await env.DB.prepare(
       "UPDATE overlay2_runtime SET poll_until=? WHERE id='main' AND active=1 AND poll_until<?",
     )
