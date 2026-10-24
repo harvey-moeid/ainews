@@ -138,6 +138,8 @@ export const OVERLAY2_DEFAULTS = {
   title: "PASURUAN AI NEWS TV · OVERLAY 2",
   banner: "KABAR PASURUAN · TANYA LEWAT KOMENTAR",
   connectorUrl: "https://tiktok-live-konektor.onrender.com",
+  connectorMode: "rest",
+  connectorAccount: "",
   comments: true,
   readComment: true,
   cooldown: 15,

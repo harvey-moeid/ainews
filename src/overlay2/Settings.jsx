@@ -22,6 +22,7 @@ export default function Overlay2Settings({
       ...settings.overlay2,
     }),
     [key, setKey] = useState(""),
+    [webhookSecret, setWebhookSecret] = useState(""),
     [catalog, setCatalog] = useState(null),
     [busy, setBusy] = useState(false),
     [status, setStatus] = useState(null);
@@ -349,13 +350,51 @@ export default function Overlay2Settings({
           </fieldset>
           <h2>TikTok LIVE Konektor</h2>
           <label>
-            Alamat konektor
-            <input
-              type="url"
-              value={draft.connectorUrl}
-              onChange={(e) => set("connectorUrl", e.target.value)}
-            />
+            Mode konektor
+            <select
+              value={draft.connectorMode}
+              onChange={(e) => set("connectorMode", e.target.value)}
+            >
+              <option value="rest">REST konektor lama</option>
+              <option value="webhook">Webhook koneklive</option>
+            </select>
           </label>
+          {draft.connectorMode === "webhook" && (
+            <>
+              <label>
+                URL webhook untuk koneklive
+                <input
+                  readOnly
+                  value={window.location.origin + "/api/hooks/tiktok"}
+                />
+              </label>
+              <label>
+                Filter username LIVE (opsional)
+                <input
+                  value={draft.connectorAccount}
+                  placeholder="jalurtarot"
+                  maxLength={100}
+                  onChange={(e) => set("connectorAccount", e.target.value)}
+                />
+              </label>
+              <p className="o2-help">
+                Di koneklive, buat integrasi Webhook dengan URL di atas dan
+                pilih event comment serta gift. Salin hmacSecret yang
+                ditampilkan sekali ke kolom Secret HMAC di bawah. Simpan mode
+                ini lalu mulai sesi Overlay 2 untuk menerima komentar.
+              </p>
+            </>
+          )}
+          {draft.connectorMode === "rest" && (
+            <label>
+              Alamat konektor
+              <input
+                type="url"
+                value={draft.connectorUrl}
+                onChange={(e) => set("connectorUrl", e.target.value)}
+              />
+            </label>
+          )}
           <div className="o2-two">
             <label>
               Jeda per akun (detik)
@@ -392,44 +431,100 @@ export default function Overlay2Settings({
         </form>
         <section className="panel o2-form">
           <h2>Kredensial konektor</h2>
-          <label>
-            API key TikTok LIVE Konektor
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder={
-                catalog?.credentials?.TLK_API_KEY === "encrypted"
-                  ? "Key sudah tersimpan; kosongkan untuk mempertahankan"
-                  : "API_KEY dari server konektor"
-              }
-            />
-          </label>
+          {draft.connectorMode === "webhook" ? (
+            <>
+              <label>
+                Secret HMAC koneklive
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={webhookSecret}
+                  onChange={(e) => setWebhookSecret(e.target.value)}
+                  placeholder={
+                    catalog?.credentials?.KONEKLIVE_WEBHOOK_SECRET !==
+                      "missing" &&
+                    catalog?.credentials?.KONEKLIVE_WEBHOOK_SECRET
+                      ? "Secret sudah tersimpan; kosongkan untuk mempertahankan"
+                      : "hmacSecret integrasi Webhook koneklive"
+                  }
+                />
+              </label>
+              <button
+                className="btn"
+                disabled={!webhookSecret || !catalog?.keyStorageReady || busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await send(
+                      "/ai/keys",
+                      {
+                        name: "KONEKLIVE_WEBHOOK_SECRET",
+                        value: webhookSecret,
+                      },
+                      "PUT",
+                    );
+                    setWebhookSecret("");
+                    setCatalog(await api("/ai/catalog"));
+                    notify("Secret webhook tersimpan terenkripsi.");
+                  } catch (e) {
+                    notify(e.message, "error");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Simpan secret webhook
+              </button>
+              <p className="o2-help">
+                Tombol Test di koneklive memeriksa pengiriman saja; event uji
+                tidak masuk antrean. Jika URL diarahkan ke login Cloudflare
+                Access, buat Bypass khusus path /api/hooks/tiktok.
+              </p>
+            </>
+          ) : (
+            <>
+              <label>
+                API key TikTok LIVE Konektor
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                  placeholder={
+                    catalog?.credentials?.TLK_API_KEY === "encrypted"
+                      ? "Key sudah tersimpan; kosongkan untuk mempertahankan"
+                      : "API_KEY dari server konektor"
+                  }
+                />
+              </label>
+              <div className="o2-inline">
+                <button
+                  className="btn"
+                  disabled={!key || !catalog?.keyStorageReady || busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await send(
+                        "/ai/keys",
+                        { name: "TLK_API_KEY", value: key },
+                        "PUT",
+                      );
+                      setKey("");
+                      setCatalog(await api("/ai/catalog"));
+                      notify("Key konektor tersimpan terenkripsi.");
+                    } catch (e) {
+                      notify(e.message, "error");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Simpan key konektor
+                </button>
+              </div>
+            </>
+          )}
           <div className="o2-inline">
-            <button
-              className="btn"
-              disabled={!key || !catalog?.keyStorageReady || busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await send(
-                    "/ai/keys",
-                    { name: "TLK_API_KEY", value: key },
-                    "PUT",
-                  );
-                  setKey("");
-                  setCatalog(await api("/ai/catalog"));
-                  notify("Key konektor tersimpan terenkripsi.");
-                } catch (e) {
-                  notify(e.message, "error");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Simpan key konektor
-            </button>
             <button
               className="btn"
               disabled={busy || mode !== "connected"}
@@ -446,13 +541,17 @@ export default function Overlay2Settings({
           {!catalog?.keyStorageReady && (
             <p className="o2-help">
               Penyimpanan key di UI membutuhkan AI_KEY_ENCRYPTION_SECRET di
-              runtime. Alternatif: pasang TLK_API_KEY langsung sebagai secret
-              runtime.
+              runtime. Alternatif: pasang{" "}
+              {draft.connectorMode === "webhook"
+                ? "KONEKLIVE_WEBHOOK_SECRET"
+                : "TLK_API_KEY"}{" "}
+              langsung sebagai secret runtime.
             </p>
           )}
           <p className="o2-help">
-            Event chat dan gift diambil melalui REST server-side setiap beberapa
-            detik saat pemutar aktif. API key tidak dikirim ke browser.
+            {draft.connectorMode === "webhook"
+              ? "Webhook diverifikasi dengan HMAC sebelum diproses. Secret tidak ditampilkan kembali."
+              : "Event chat dan gift diambil melalui REST server-side setiap beberapa detik saat pemutar aktif. API key tidak dikirim ke browser."}
           </p>
         </section>
       </div>
